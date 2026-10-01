@@ -1,0 +1,9 @@
+build/
+.cache/
+config/
+*.env
+local.properties
+__pycache__/
+*.pyc
+release/
+.DS_Store

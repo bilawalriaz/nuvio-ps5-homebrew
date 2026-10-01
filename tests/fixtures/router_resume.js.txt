@@ -1,0 +1,48 @@
+/* GPL-3.0. Nuvio 48a94b347837965e2e052f82707820c0dd7c8028 route-resume methods. */
+    isWebOsResumeRouteRestorable(routeName = this.current) {
+      const route = String(routeName || "").trim();
+      return Boolean(route && this.routes[route] && !WEBOS_NON_RESTORABLE_ROUTES.has(route));
+    },
+    persistWebOsResumeRoute(routeName = this.current, params = this.currentParams) {
+      if (!Platform.isWebOS()) {
+        return;
+      }
+      const route = String(routeName || "").trim();
+      if (!this.isWebOsResumeRouteRestorable(route)) {
+        LocalStore.remove(WEBOS_RESUME_ROUTE_KEY);
+        return;
+      }
+      try {
+        LocalStore.set(WEBOS_RESUME_ROUTE_KEY, {
+          route,
+          params: params || {},
+          savedAt: Date.now()
+        });
+      } catch (error) {
+        console.warn("Failed to persist webOS resume route", error);
+      }
+    },
+    consumeWebOsResumeRoute() {
+      if (!Platform.isWebOS()) {
+        return null;
+      }
+      const snapshot = LocalStore.get(WEBOS_RESUME_ROUTE_KEY, null);
+      if (!snapshot || typeof snapshot !== "object") {
+        return null;
+      }
+      const route = String(snapshot.route || "").trim();
+      const savedAt = Number(snapshot.savedAt || 0);
+      if (
+        !route ||
+        !this.isWebOsResumeRouteRestorable(route) ||
+        !Number.isFinite(savedAt) ||
+        Date.now() - savedAt > WEBOS_RESUME_ROUTE_TTL_MS
+      ) {
+        LocalStore.remove(WEBOS_RESUME_ROUTE_KEY);
+        return null;
+      }
+      return {
+        route,
+        params: snapshot.params && typeof snapshot.params === "object" ? snapshot.params : {}
+      };
+    },

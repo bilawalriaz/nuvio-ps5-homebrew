@@ -1,0 +1,25 @@
+--- a/js/ui/navigation/routerMethods-02-complete-route-return-back-guard.js
++++ b/js/ui/navigation/routerMethods-02-complete-route-return-back-guard.js
+@@ -40,11 +40,12 @@
+       return Boolean(route && this.routes[route] && !WEBOS_NON_RESTORABLE_ROUTES.has(route));
+     },
+     persistWebOsResumeRoute(routeName = this.current, params = this.currentParams) {
+-      if (!Platform.isWebOS()) {
++      if (!Platform.isWebOS() && !globalThis.__NUVIO_PS5__) {
+         return;
+       }
+       const route = String(routeName || "").trim();
+       if (!this.isWebOsResumeRouteRestorable(route)) {
++        if (globalThis.__NUVIO_PS5__) return;
+         LocalStore.remove(WEBOS_RESUME_ROUTE_KEY);
+         return;
+       }
+@@ -59,7 +60,7 @@
+       }
+     },
+     consumeWebOsResumeRoute() {
+-      if (!Platform.isWebOS()) {
++      if (!Platform.isWebOS() && !globalThis.__NUVIO_PS5__) {
+         return null;
+       }
+       const snapshot = LocalStore.get(WEBOS_RESUME_ROUTE_KEY, null);

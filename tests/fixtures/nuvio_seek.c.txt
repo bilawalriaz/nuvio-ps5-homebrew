@@ -1,0 +1,51 @@
+/* GPL-3.0-or-later. Exact function from EVO commit 21524a4a6effa65312be2026042e44a96efca4c6. */
+int prospero_request_inplace_seek(
+    double target_seconds,
+    int restore_paused
+) {
+    if (
+        !play_fmt ||
+        (video_stream_index < 0 && audio_stream_index < 0) ||
+        !current_media_path[0]
+    ) {
+        return 0;
+    }
+
+    if (target_seconds < 0.0) {
+        target_seconds = 0.0;
+    }
+
+    if (media_duration_sec > 1.0) {
+        double maximum =
+            media_duration_sec - 1.0;
+
+        if (maximum < 0.0) {
+            maximum = 0.0;
+        }
+
+        if (target_seconds > maximum) {
+            target_seconds = maximum;
+        }
+    }
+
+    player_paused = 1;
+    controls_last_used_ms = now_ms();
+
+    pthread_mutex_lock(
+        &prospero_seek_mutex
+    );
+
+    prospero_seek_target_seconds =
+        target_seconds;
+
+    prospero_seek_restore_paused =
+        restore_paused;
+
+    prospero_seek_pending = 1;
+
+    pthread_mutex_unlock(
+        &prospero_seek_mutex
+    );
+
+    return 1;
+}

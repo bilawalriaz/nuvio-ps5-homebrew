@@ -1,0 +1,6 @@
+<rml><head><style>
+body { margin: 0; width: 100%; height: 100%; background-color: #080a10; color: #a6adbc; font-family: LatoLatin; }
+#nuvio-brand { position: absolute; left: 50%; top: 42%; margin-left: -190dp; width: 380dp; height: 120dp; }
+#nuvio-status { position: absolute; top: 59%; width: 100%; text-align: center; font-size: 22dp; letter-spacing: 1dp; }
+#nuvio-line { position: absolute; top: 66%; left: 50%; margin-left: -24dp; width: 48dp; height: 3dp; background-color: #7b62ff; border-radius: 2dp; }
+</style></head><body><img id="nuvio-brand" src="../icons/nuvio-wordmark.png"/><div id="nuvio-status">Opening Nuvio</div><div id="nuvio-line"></div></body></rml>

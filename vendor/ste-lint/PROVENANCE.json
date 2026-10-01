@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/danyuchn/asd-ste100-skill",
+  "revision": "7d4a135a199a5d7447c4886bcd7ffe742a627bc9",
+  "retrieved": "2026-10-01",
+  "license": "MIT",
+  "files": {
+    "ste-lint.py": "73bbd3de05b6517428ff6df73b789248a2d11f9eaf8d413fee56bbe71b5f863b",
+    "LICENSE": "d3c674e8592076c9021a59b55177adbcba6fd7e1710082becb922522b22ec672"
+  }
+}

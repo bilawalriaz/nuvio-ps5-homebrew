@@ -1,0 +1,599 @@
+--- a/projects/evoplayer/addons/include/evo_provider.h
++++ b/projects/evoplayer/addons/include/evo_provider.h
+@@ -15,7 +15,7 @@
+  *   logic  - this vtable, compiled into the app module. Auth, catalog, search,
+  *            link resolution, progress reporting. C, in-binary, trusted.
+  *   look   - the provider's OWN .rml/.rcss bundle, fetched at runtime over
+- *            HTTP and cached under /data/evoplayer/providers/<id>/. Markup and
++ *            HTTP and cached under /data/nuvio/providers/<id>/. Markup and
+  *            styling only; see evo_provider_bundle.h.
+  *
+  * The logic half publishes a data model. The downloaded markup binds to it by
+@@ -56,7 +56,7 @@
+  */
+ #define EVO_PROVIDER_API_VERSION 1
+ 
+-/* A provider id is a directory name under /data/evoplayer/providers/, so it is
++/* A provider id is a directory name under /data/nuvio/providers/, so it is
+  * deliberately narrow: lowercase ASCII, digits, '-' and '_'. Validated by
+  * evo_provider_id_valid() rather than trusted. */
+ #define EVO_PROVIDER_MAX_ID       24
+--- a/projects/evoplayer/addons/include/evo_provider_bundle.h
++++ b/projects/evoplayer/addons/include/evo_provider_bundle.h
+@@ -3,7 +3,7 @@
+  *
+  * A bundle is the "look" half of a provider (see evo_provider.h): the markup
+  * and styling the service authors for itself, fetched over HTTP at runtime and
+- * cached under /data/evoplayer/providers/<id>/. Emby looks like Emby; IPTV is
++ * cached under /data/nuvio/providers/<id>/. Emby looks like Emby; IPTV is
+  * a channel grid. EVO renders it and supplies the data; it does not design it.
+  *
+  * WHY THIS IS SAFE TO DOWNLOAD
+@@ -137,7 +137,7 @@
+ 
+ /*
+  * The cache directory for `provider_id`, with no trailing slash:
+- * "/data/evoplayer/providers/iptv". Returns NULL if the id is not valid.
++ * "/data/nuvio/providers/iptv". Returns NULL if the id is not valid.
+  * The buffer is per-thread static - use it immediately.
+  */
+ const char *evo_bundle_dir(const char *provider_id);
+--- a/projects/evoplayer/addons/src/evo_provider_bundle.c
++++ b/projects/evoplayer/addons/src/evo_provider_bundle.c
+@@ -9,7 +9,7 @@
+  * Three separate jobs, in order of how much damage getting them wrong does:
+  *
+  *   1. PATH SAFETY. A manifest entry names where its file is written and,
+- *      later, what LoadDocument opens. An entry of "../../../data/evoplayer/
++ *      later, what LoadDocument opens. An entry of "../../../data/nuvio/
+  *      emby.conf" would have this code write a downloaded file over stored
+  *      credentials. evo_bundle_path() is the only way to turn a bundle-relative
+  *      name into a real path and it refuses anything that could leave the
+--- a/projects/evoplayer/addons/src/provider_stremio.c
++++ b/projects/evoplayer/addons/src/provider_stremio.c
+@@ -13,7 +13,7 @@
+  * screens are EVO's own (rml/mediaserver.rml, the same poster grid as Emby and
+  * Jellyfin) and nothing runs in the PS5 browser.
+  *
+- * The user's addons are a list of manifest URLs in /data/evoplayer/addons.json.
++ * The user's addons are a list of manifest URLs in /data/nuvio/addons.json.
+  * Only streams with a direct http(s) `url` are offered; torrent-only streams
+  * (infoHash) need a debrid resolver and are skipped.
+  *
+--- a/projects/evoplayer/core/src/Application.cpp
++++ b/projects/evoplayer/core/src/Application.cpp
+@@ -585,6 +585,7 @@
+ PlaybackSource g_web_src;
+ pthread_t g_web_thread;
+ std::atomic<bool> g_web_done{false};
++bool g_nuvio_preparing = false;
+ std::atomic<bool> g_web_ok{false};
+ 
+ void* web_start_worker(void*) {
+@@ -692,6 +693,7 @@
+         char url[2048], title[256];
+         if (!evo_webui_take_play(url, sizeof url, title, sizeof title))
+             return;
++        g_nuvio_preparing = true;
+         g_web_src = PlaybackSource();
+         g_web_src.url = url;
+         g_web_src.title = title[0] ? title : "Web";
+@@ -713,6 +715,7 @@
+         if (!g_web_done)
+             return;
+         pthread_join(g_web_thread, nullptr);
++        g_nuvio_preparing = false;
+         evo_bt("web: startPlaybackSource -> %s", g_web_ok ? "ok" : "failed");
+         evo_boot_log_flush();
+         if (!g_web_ok) {
+@@ -1140,6 +1143,15 @@
+          * what turns that into a main-thread callback for the screen. */
+         evo_bundle_poll();
+         evo_usb_remote_poll();
++        /* Nuvio starts once its durable settings are reachable. Existing
++         * EVO code owns browser, playback handoff and shutdown lifetimes. */
++        static bool nuvio_opened = false;
++        if (!nuvio_opened && evo_jailbreak_is_open()) {
++            const evo_provider_t *nv = evo_provider_find("nuvio");
++            if (nv && nv->is_configured() &&
++                evo_webui_open_ex(nv->web_ui_url(), "/", "nuvio") == 0)
++                nuvio_opened = true;
++        }
+         evo_webui_pump();   /* #101: the system browser, when a web UI is open */
+         webui_playback_pump();
+ 
+@@ -1411,6 +1423,9 @@
+ 
+         // 3. Determine if graphics needs to render/present
+         bool isPlayer = (m_screenManager->getCurrentScreenId() == ScreenId::Player);
++        bool nuvioShell = !isPlayer &&
++            !(m_playbackController && m_playbackController->isActive()) &&
++            !evo_webui_native_requested();
+         bool isSurround = (m_screenManager->getCurrentScreenId() == ScreenId::SurroundTest);
+         bool isHighRefresh = isPlayer || isSurround;
+ 
+@@ -1466,7 +1481,7 @@
+          * page or a bundle refresh landing between two button presses would
+          * not be drawn until the next press.
+          */
+-        int uiActive = (frame < 10) || isPlayer || isSurround || hasInput || hasAnim ||
++        int uiActive = nuvioShell || (frame < 10) || isPlayer || isSurround || hasInput || hasAnim ||
+                        evo_rmlui_needs_frame() ||
+                        evo_rmlui_provider_needs_frame() || (jb_repaint > 0);
+         if (jb_repaint > 0) jb_repaint--;
+@@ -1655,7 +1670,11 @@
+                     evo_bt("frame %d: screenManager render begin", frame);
+                     evo_boot_log_flush();
+                 }
+-                m_screenManager->render(m_uiScratch, DisplayWidth, DisplayHeight);
++                if (nuvioShell)
++                    evo_rmlui_render_nuvio(m_uiScratch, DisplayWidth, DisplayHeight,
++                        g_nuvio_preparing ? "Preparing playback" : "Opening Nuvio");
++                else
++                    m_screenManager->render(m_uiScratch, DisplayWidth, DisplayHeight);
+                 if (frame < 5) {
+                     evo_bt("frame %d: screenManager render done", frame);
+                     evo_boot_log_flush();
+--- a/projects/evoplayer/core/src/screens/PlayerScreen.cpp
++++ b/projects/evoplayer/core/src/screens/PlayerScreen.cpp
+@@ -1,4 +1,5 @@
+ #include "evo/screens/PlayerScreen.hpp"
++#include "evo_webui.h"
+ #include "evo/Application.hpp"
+ #include "evo_rmlui_bridge.h"
+ #include "evo_playback.h"
+@@ -146,6 +147,13 @@
+         return true;
+     }
+     if (pressed & PadButtons::Circle) {
++        // Nuvio's Back stops the native session; the existing bridge then reopens it.
++        // Native-only playback retains its confirmation and other overlays.
++        if (!evo_webui_native_requested()) {
++            playback->stopPlayback();
++            if (screenMgr) screenMgr->returnFromPlayback();
++            return true;
++        }
+         // Stop playback confirmation prompt
+         if (screenMgr) {
+             screenMgr->navigateTo(ScreenId::ExitConfirm);
+--- a/projects/evoplayer/core/src/services/PlaybackController.cpp
++++ b/projects/evoplayer/core/src/services/PlaybackController.cpp
+@@ -1422,8 +1422,8 @@
+     resume_base_offset_seconds = targetSeconds;
+ 
+     int64_t targetUs = static_cast<int64_t>(targetSeconds * 1000000.0);
+-    prospero_request_inplace_seek(targetSeconds, 0);
+-    pp_playback_notify_seek_begin(&g_pp_pb, targetUs);
++    if (prospero_request_inplace_seek(targetSeconds, 0))
++        pp_playback_notify_seek_begin(&g_pp_pb, targetUs);
+ }
+ 
+ void PlaybackController::jumpChapter(int direction) {
+--- a/projects/evoplayer/include/evo_data_path.h
++++ b/projects/evoplayer/include/evo_data_path.h
+@@ -4,19 +4,19 @@
+ /*
+  * evo_data_path - where EVO's persistent data lives.
+  *
+- * As an elfldr payload EVO runs unsandboxed and writes to /data/evoplayer/.
++ * As an elfldr payload EVO runs unsandboxed and writes to /data/nuvio/.
+  * As the PPSA99039 app module the process launches into a fresh per-title
+  * sandbox: /data is ENOENT until evo_jailbreak_self() lifts it. Once lifted,
+- * /data/evoplayer/ is the durable home - the same as the payload.
+- * /download0/evoplayer/ is only a fallback for the window before the self-unjail
++ * /data/nuvio/ is the durable home - the same as the payload.
++ * /download0/nuvio/ is only a fallback for the window before the self-unjail
+  * lands (or if it never does); it is a savedata-relative mount with no
+  * sceSaveDataMount2/commit behind it, so writes there do NOT survive a
+  * relaunch (issue #46).
+  *
+  * The root therefore has to be picked at RUNTIME, not compile time:
+- *   - payload / host build:            always /data/evoplayer
+- *   - app module, sandbox open:        /data/evoplayer   (cached once resolved)
+- *   - app module, sandbox still shut:  /download0/evoplayer (transient, not cached)
++ *   - payload / host build:            always /data/nuvio
++ *   - app module, sandbox open:        /data/nuvio   (cached once resolved)
++ *   - app module, sandbox still shut:  /download0/nuvio (transient, not cached)
+  *
+  * evo_data_dir() / evo_data_path() do that resolution. Nothing else should
+  * reference EVO_DATA_DIR - it survives only as the fallback literal inside
+@@ -24,9 +24,9 @@
+  */
+ 
+ #ifdef EVO_APP_MODULE
+-#define EVO_DATA_DIR "/download0/evoplayer"   /* fallback only - see above */
++#define EVO_DATA_DIR "/download0/nuvio"   /* fallback only - see above */
+ #else
+-#define EVO_DATA_DIR "/data/evoplayer"
++#define EVO_DATA_DIR "/data/nuvio"
+ #endif
+ 
+ #ifdef __cplusplus
+@@ -35,12 +35,12 @@
+ 
+ /* The data root, no trailing slash. Resolved once, lazily; on the app module
+  * it stays on the /download0 fallback (uncached) until the sandbox opens, then
+- * pins to /data/evoplayer. */
++ * pins to /data/nuvio. */
+ const char *evo_data_dir(void);
+ 
+ /*
+  * Join `leaf` onto the data root: evo_data_path("emby.conf") ->
+- * "/data/evoplayer/emby.conf". A leading '/' on `leaf` is ignored.
++ * "/data/nuvio/emby.conf". A leading '/' on `leaf` is ignored.
+  *
+  * Returns a pointer to a per-thread static buffer - use it immediately (as an
+  * fopen()/open() argument, say); do not stash it or pass two results of this
+--- a/projects/evoplayer/include/evo_favorites.h
++++ b/projects/evoplayer/include/evo_favorites.h
+@@ -4,7 +4,7 @@
+ /*
+  * Module: evo_favorites
+  *
+- * Favorites database. Persists to /data/evoplayer/evo_favorites.txt.
++ * Favorites database. Persists to /data/nuvio/evo_favorites.txt.
+  * Stores up to 100 entries with path, title and duration.
+  *
+  * Public surface:
+--- a/projects/evoplayer/include/evo_recent.h
++++ b/projects/evoplayer/include/evo_recent.h
+@@ -4,7 +4,7 @@
+ /*
+  * Module: evo_recent
+  *
+- * Recent-files database. Persists to /data/evoplayer/evo_recent.txt.
++ * Recent-files database. Persists to /data/nuvio/evo_recent.txt.
+  * Stores the last 25 played files with path, title, position and duration.
+  *
+  * Public surface:
+--- a/projects/evoplayer/include/evo_webui.h
++++ b/projects/evoplayer/include/evo_webui.h
+@@ -88,3 +88,8 @@
+ #endif
+ 
+ #endif /* EVO_WEBUI_H */
++
++#ifdef __cplusplus
++extern "C"
++#endif
++int evo_webui_native_requested(void);
+--- a/projects/evoplayer/media/src/evo_demux.c
++++ b/projects/evoplayer/media/src/evo_demux.c
+@@ -102,8 +102,7 @@
+ ) {
+     if (
+         !play_fmt ||
+-        (video_stream_index < 0 && audio_stream_index < 0) ||
+-        !current_media_path[0]
++        (video_stream_index < 0 && audio_stream_index < 0)
+     ) {
+         return 0;
+     }
+--- a/projects/evoplayer/pp/src/evo_theme.c
++++ b/projects/evoplayer/pp/src/evo_theme.c
+@@ -28,7 +28,7 @@
+  *
+  * elfldr payload: USB, as documented (docs/theming.md). App module: USB is
+  * ENOENT in the sandbox until tools/sandbox-unjail (task 7), so custom themes
+- * come from /download0/evoplayer/themes/ instead. */
++ * come from /download0/nuvio/themes/ instead. */
+ #ifndef EVO_THEME_DIR
+ #ifdef EVO_APP_MODULE
+ #define EVO_THEME_DIR evo_data_path("themes")
+--- a/projects/evoplayer/sce_sys/param.json
++++ b/projects/evoplayer/sce_sys/param.json
+@@ -7,9 +7,9 @@
+   "attribute": 1644167168,
+   "attribute2": 0,
+   "attribute3": 524352,
+-  "conceptId": "99039",
++  "conceptId": "99997",
+   "contentBadgeType": 1,
+-  "contentId": "UP9000-PPSA99039_00-EVOPLAYER0000000",
++  "contentId": "UP9000-PPSA99997_00-NUVIOPS500000000",
+   "contentVersion": "01.000.001",
+   "downloadDataSize": 256,
+   "gameIntent": {
+@@ -22,7 +22,7 @@
+   "localizedParameters": {
+     "defaultLanguage": "en-US",
+     "en-US": {
+-      "titleName": "EVO Player"
++      "titleName": "Nuvio"
+     }
+   },
+   "masterVersion": "01.00",
+@@ -33,6 +33,6 @@
+   },
+   "requiredSystemSoftwareVersion": "0x0000000000000000",
+   "sdkVersion": "0x0000000000000000",
+-  "titleId": "PPSA99039",
++  "titleId": "PPSA99997",
+   "versionFileUri": ""
+ }
+--- a/projects/evoplayer/src/evo_boot_log.c
++++ b/projects/evoplayer/src/evo_boot_log.c
+@@ -16,7 +16,7 @@
+ extern int sceKernelSendNotificationRequest(int, void *, unsigned long, int);
+ #endif
+ 
+-#define EVO_LOG_PATH "/mnt/usb0/evo.log"
++#define EVO_LOG_PATH "/data/nuvio/evo.log"
+ 
+ /*
+  * Two phases:
+--- a/projects/evoplayer/src/evo_crash_note.c
++++ b/projects/evoplayer/src/evo_crash_note.c
+@@ -40,8 +40,8 @@
+ {
+     /*
+      * Re-resolves every call, because the data root moves. On the app module
+-     * evo_data_dir() answers /download0/evoplayer until the self-unjail lands
+-     * and /data/evoplayer after - and only the latter survives a relaunch
++     * evo_data_dir() answers /download0/nuvio until the self-unjail lands
++     * and /data/nuvio after - and only the latter survives a relaunch
+      * (issue #46), which is the whole point of the quarantine. So this is
+      * called again after evo_data_path_rebind().
+      */
+--- a/projects/evoplayer/src/evo_data_path.c
++++ b/projects/evoplayer/src/evo_data_path.c
+@@ -29,8 +29,8 @@
+ 
+ #ifdef EVO_APP_MODULE
+     if (!evo_jailbreak_is_open())
+-        return EVO_DATA_DIR;              /* "/download0/evoplayer" - transient */
+-    g_root = "/data/evoplayer";
++        return EVO_DATA_DIR;              /* "/download0/nuvio" - transient */
++    g_root = "/data/nuvio";
+ #else
+     /*
+      * #90: the host renderer needs a writable data root somewhere other than
+@@ -48,7 +48,7 @@
+         g_root = buf;
+         return g_root;
+     }
+-    g_root = EVO_DATA_DIR;                /* "/data/evoplayer" - always */
++    g_root = EVO_DATA_DIR;                /* "/data/nuvio" - always */
+ #endif
+     return g_root;
+ }
+--- a/projects/evoplayer/src/evo_favorites.c
++++ b/projects/evoplayer/src/evo_favorites.c
+@@ -1,7 +1,7 @@
+ /*
+  * Module: evo_favorites
+  *
+- * Favorites database. Persists to /data/evoplayer/evo_favorites.txt.
++ * Favorites database. Persists to /data/nuvio/evo_favorites.txt.
+  * Extracted from main.c (lines 617–721, 1591–1607).
+  */
+ 
+--- a/projects/evoplayer/src/evo_recent.c
++++ b/projects/evoplayer/src/evo_recent.c
+@@ -1,7 +1,7 @@
+ /*
+  * Module: evo_recent
+  *
+- * Recent-files database. Persists to /data/evoplayer/evo_recent.txt.
++ * Recent-files database. Persists to /data/nuvio/evo_recent.txt.
+  * Extracted from main.c (lines 600–614, 1611–1723, 1428–1445).
+  */
+ 
+--- a/projects/evoplayer/src/evo_webui.c
++++ b/projects/evoplayer/src/evo_webui.c
+@@ -141,7 +141,7 @@
+ } probe_layout_t;
+ 
+ static const probe_layout_t k_layouts[] = {
+-    { "1: beside the rail, parts=0 control=0",      2, 108,  0, 1812, 1080, 0x0, 0x0 },
++    { "1: beside the rail, parts=0 control=0",      2,   0,  0, 1920, 1080, 0x0, 0x0 },
+     { "2: beside the rail, parts=0x7 control=0",    2, 108,  0, 1812, 1080, 0x7, 0x0 },
+     { "3: inset card, parts=0 control=0x1",         2, 148, 40, 1732, 1000, 0x0, 0x1 },
+     { "4: inset card, parts=0xFF control=0xFF",     2, 148, 40, 1732, 1000, 0xFF, 0xFF },
+@@ -179,6 +179,7 @@
+ static int  s_hold_frames = 25 * 60;
+ 
+ static char s_url[1024];
++static int s_native_requested;
+ static char s_hook_profile[16];      /* "" = media server, "nuvio" */
+ static char s_open_url[2048];        /* what the dialog opens first */
+ static char s_reopen_url[2048];      /* where it reopens after playback */
+@@ -532,7 +533,7 @@
+  * panicked the console. Re-added on a timer in case the site rebuilds the
+  * page body. */
+ "function addClose(){if(!document.body||document.getElementById('__evoClose'))return;"
+-" var b=document.createElement('div');b.id='__evoClose';b.textContent='Back to EVO';"
++" var b=document.createElement('div');b.id='__evoClose';b.textContent='Player settings';"
+ " b.setAttribute('style','position:fixed;right:28px;bottom:28px;z-index:2147483647;padding:14px 30px;"
+ "border-radius:30px;background:rgba(0,0,0,.75);color:#fff;font:24px sans-serif;cursor:pointer;"
+ "border:2px solid rgba(255,255,255,.55)');"
+@@ -814,6 +815,7 @@
+         tlog("close requested by the page");
+         pthread_mutex_lock(&s_mx);
+         s_close_req = 1;
++        s_native_requested = 1;
+         pthread_mutex_unlock(&s_mx);
+         respond(fd, "204 No Content", "text/plain", "", 0);
+     } else if (!strncmp(path, "/evo/log", 8)) {
+@@ -1229,6 +1231,7 @@
+     pthread_mutex_lock(&s_mx);
+     s_close_req = 0;                     /* nothing stale from a previous page */
+     s_hook_seen = 0;
++    s_native_requested = 0;
+     s_entry_failed = 0;
+     s_handoff_ready = 0;
+     pthread_mutex_unlock(&s_mx);
+@@ -1547,3 +1550,10 @@
+ #else
+ typedef int evo_webui_not_built; /* keep the TU non-empty */
+ #endif /* EVO_APP_MODULE */
++
++int evo_webui_native_requested(void) {
++    pthread_mutex_lock(&s_mx);
++    int result = s_native_requested;
++    pthread_mutex_unlock(&s_mx);
++    return result;
++}
+--- a/projects/evoplayer/ui_rml/include/evo_rmlui_app.h
++++ b/projects/evoplayer/ui_rml/include/evo_rmlui_app.h
+@@ -602,6 +602,7 @@
+ 
+     void UpdateLaunchState(const EvoLaunchState& state);
+     void RenderLaunch(uint32_t* framebuffer, int width, int height);
++    void RenderNuvio(uint32_t* framebuffer, int width, int height, const char* message);
+ 
+     void UpdatePlaybackState(const EvoPlaybackState& state);
+     void UpdatePerfHud(const evo_perf_hud_t* hud);   // #81/#63 diagnostic HUD
+@@ -704,6 +705,7 @@
+     Rml::Context* m_context = nullptr;
+     /* panel width / EVO_UI_DESIGN_W; 1.0 at 1080p. Applied to every context. */
+     float m_dp_ratio = 1.0f;
++    Rml::ElementDocument* m_nuvio_doc = nullptr;
+     Rml::ElementDocument* m_launch_doc = nullptr;
+     Rml::ElementDocument* m_list_doc = nullptr;
+     Rml::ElementDocument* m_browser_doc = nullptr;
+--- a/projects/evoplayer/ui_rml/include/evo_rmlui_bridge.h
++++ b/projects/evoplayer/ui_rml/include/evo_rmlui_bridge.h
+@@ -595,6 +595,7 @@
+ /* Launch / home screen API */
+ void evo_rmlui_update_launch(const evo_rmlui_launch_params_t* params);
+ void evo_rmlui_render_launch(uint32_t* framebuffer, int width, int height);
++void evo_rmlui_render_nuvio(uint32_t* framebuffer, int width, int height, const char* message);
+ 
+ /* Generic list screen API (recent, favorites, emby setup, emby browse) */
+ void evo_rmlui_update_list(const evo_rmlui_list_params_t* params);
+--- a/projects/evoplayer/ui_rml/src/evo_rmlui_app.cpp
++++ b/projects/evoplayer/ui_rml/src/evo_rmlui_app.cpp
+@@ -226,7 +226,7 @@
+         m_launch_doc, m_list_doc, m_browser_doc, m_changelog_doc, m_reader_doc,
+         m_image_doc, m_surround_doc, m_playback_doc, m_dialog_doc,
+         m_settings_doc, m_about_doc, m_subtitles_doc, m_mediainfo_doc,
+-        m_closed_doc,
++        m_closed_doc, m_nuvio_doc,
+     };
+     for (Rml::ElementDocument* doc : screens) {
+         if (!doc || doc == keep) continue;
+@@ -312,7 +312,7 @@
+      * the /app0 sandbox's broken directory traversal never comes into play.
+      * The remaining entries are host/dev fallbacks (fopen against loose
+      * files) for when the bundle hasn't been (re)generated. The old
+-     * /data/evoplayer/app/ and /data/homebrew/EVOPlayer/ search paths - the
++     * /data/nuvio/app/ and /data/homebrew/EVOPlayer/ search paths - the
+      * #44 out-of-band FTP sync target - are gone: that sync is removed
+      * (deploy-app.sh), and shipping a self-contained .ffpfsc means those
+      * loose console-side copies must have zero effect on rendering. */
+@@ -372,6 +372,10 @@
+     };
+ 
+     for (const auto& p : rml_prefixes) {
++        if (!m_nuvio_doc) {
++            m_nuvio_doc = m_context->LoadDocument(p + "nuvio.rml");
++            if (m_nuvio_doc) m_nuvio_doc->Hide();
++        }
+         if (!m_launch_doc) {
+             m_launch_doc = m_context->LoadDocument(p + "launch.rml");
+             if (m_launch_doc) m_launch_doc->Hide();
+@@ -4089,3 +4093,14 @@
+ #endif
+ }
+ 
++
++void EvoRmlApp::RenderNuvio(uint32_t* framebuffer, int width, int height, const char* message) {
++    if (!m_context || !m_nuvio_doc) return;
++    ShowOnlyScreen(m_nuvio_doc);
++    if (m_nav_doc) m_nav_doc->Hide();
++    Rml::Element* status = m_nuvio_doc->GetElementById("nuvio-status");
++    if (status && status->GetInnerRML() != (message ? message : "Opening Nuvio"))
++        status->SetInnerRML(message ? message : "Opening Nuvio");
++    m_context->Update();
++    RenderCachedScreen(30, framebuffer, width, height);
++}
+--- a/projects/evoplayer/ui_rml/src/evo_rmlui_bridge.cpp
++++ b/projects/evoplayer/ui_rml/src/evo_rmlui_bridge.cpp
+@@ -552,3 +552,7 @@
+ 
+ } // extern "C"
+ 
++
++extern "C" void evo_rmlui_render_nuvio(uint32_t* framebuffer,int width,int height,const char* message) {
++    EvoRmlApp::Instance().RenderNuvio(framebuffer,width,height,message);
++}
+--- a/projects/evoplayer/ui_rml/src/evo_rmlui_render.cpp
++++ b/projects/evoplayer/ui_rml/src/evo_rmlui_render.cpp
+@@ -346,7 +346,7 @@
+     if (!data) {
+         /* Not bundled (or the bundle is stale/missing) - fall back to disk,
+          * same prefixes evo_rmlui_app.cpp tries for .rml/.rcss/fonts. The
+-         * #44 out-of-band /data/evoplayer/app/assets/ sync target and the
++         * #44 out-of-band /data/nuvio/app/assets/ sync target and the
+          * defunct ELF-payload /data/homebrew/EVOPlayer/ path are gone - #60
+          * makes the package self-contained instead of leaning on either. */
+         std::vector<std::string> candidates = {
+--- a/scripts/package-app.sh
++++ b/scripts/package-app.sh
+@@ -172,7 +172,8 @@
+ # 2. Native-app dependency bootstrap (static zlib for the host converter).
+ # ---------------------------------------------------------------------------
+ begin "native-app dependencies"
+-eval "$("${SCRIPTS_DIR}/setup-native-app-deps.sh")"
++ZLIB_INCLUDE="${NUVIO_MAC_SDK}/usr/include"
++ZLIB_ARCHIVE="${NUVIO_MAC_SDK}/usr/lib/libz.tbd"
+ need_file "${ZLIB_ARCHIVE:?}" "zlib bootstrap did not yield an archive"
+ 
+ # ---------------------------------------------------------------------------
+@@ -180,8 +181,8 @@
+ # ---------------------------------------------------------------------------
+ begin "building host converter (ps5-native-tool)"
+ TOOL="${BUILD}/host/ps5-native-tool"
+-clang++ -std=c++20 -O2 -Wall -Wextra -Werror \
+-    -I "${ZLIB_INCLUDE}" \
++/usr/bin/clang++ -std=c++20 -O2 -Wall -Wextra -Werror \
++     \
+     "${NATIVE}/native_app_builder.cpp" "${NATIVE}/self_container.cpp" \
+     "${NATIVE}/elf_object.cpp" "${NATIVE}/sce_module_writer.cpp" \
+     "${ZLIB_ARCHIVE}" -o "${TOOL}"
+@@ -196,7 +197,7 @@
+     expected_signed="$(awk '{print $1}' "${NATIVE}/runtime/libc.prx.sha256")"
+     local work="${BUILD}/runtime-shim"
+     mkdir -p "${work}"
+-    clang++ -std=c++20 -O2 -Wall -Wextra -Werror \
++    /usr/bin/clang++ -std=c++20 -O2 -Wall -Wextra -Werror \
+         "${NATIVE}/libc_builder.cpp" -o "${work}/libc-builder"
+     local copy
+     for copy in a b; do
+@@ -274,7 +275,7 @@
+     # cached mount is caught immediately instead of costing a console session.
+     # Written to a generated header to sidestep -D string quoting through the
+     # make -> /bin/sh recipe chain.
+-    BUILD_SHA="$(git -C "${EVO}" rev-parse --short=8 HEAD 2>/dev/null || echo unknown)"
++    BUILD_SHA="21524a4a-nuvio"
+     git -C "${EVO}" diff --quiet -- "${EVO}" 2>/dev/null || BUILD_SHA="${BUILD_SHA}-dirty"
+     printf '#pragma once\n#define EVO_BUILD_ID "%s_%s"\n' \
+         "${BUILD_SHA}" "$(date -u +%m%d-%H%M)" > "${EVO}/include/evo_build_id.h"
+@@ -388,16 +389,10 @@
+     ok "librmlui.a patched"
+     ARCHIVE_GROUP+=("${RML_A}")
+ 
+-    # Auto-install libdav1d into sysroot if missing
+-    if [[ ! -f "${HB}/lib/libdav1d.a" && -x "${REPO_ROOT}/scripts/build-dav1d.sh" ]]; then
+-        begin "installing libdav1d into sysroot"
+-        "${REPO_ROOT}/scripts/build-dav1d.sh" --install
+-    fi
+-
+     # Static archives EVO links (Makefile LIBS + build-evoplayer.sh transitive
+     # set). Order-independent inside the group.
+     for a in libSDL2 \
+-             libavformat libavcodec libswresample libavutil libswscale libdav1d \
++             libavformat libavcodec libswresample libavutil libswscale \
+              libass libfreetype libharfbuzz libharfbuzz-subset libfribidi \
+              libpng16 libsamplerate libssl libcrypto libiconv libxml2 \
+              libz libbz2 liblzma libzstd libm; do
+@@ -675,7 +670,7 @@
+ 
+ echo ""
+ ok "app module: ${APPDIR#"${REPO_ROOT}/"}/"
+-find "${APPDIR}" -type f -printf '     %-42P  %s bytes\n' | sort
++echo "Installable inventory is recorded in build.json."
+ echo ""
+ echo "   Deploy + launch:"
+ echo "     ./scripts/deploy-app.sh          # FTP -> /data/homebrew/${TITLE_ID}/"
