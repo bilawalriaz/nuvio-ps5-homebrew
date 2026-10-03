@@ -1,34 +1,38 @@
 # Release
 
-## Current release state
+## Versioning
 
-The current version is `0.1.0-alpha.1`.
-The source repository is public.
-No binary prerelease is published.
-The owner requested public-project preparation on 2026-10-01.
-The owner authorized this separate public source repository.
-Binary publication remains a separate action.
-See [Launch](LAUNCH.md) for the source announcement and binary gates.
-The visible route after the corrected playback exit remains pending.
-See [Validation](VALIDATION.md) before changing that status.
+`VERSION` holds the release version, for example `0.1.0-alpha.1`. The native
+title records its own content version in `sce_sys/param.json` as
+`contentVersion`, for example `01.000.001`. Raise the content version in every
+release so an installed console sees the update.
 
-## Prepare the candidate
+The PS5 Homebrew Store catalog accepts pre-release tags. Use a fixed tag such as
+`v0.1.0-alpha.1`, never a moving tag such as `latest` or `nightly`.
 
-1. Save the currently installed receipt privately.
+## Cut a release
+
+1. Raise `VERSION` and the `contentVersion` in the build template.
 2. Run `make check`.
-3. Build the candidate if native code changed.
-4. Inspect the generated patches.
-5. Check the candidate receipt and source pins.
-6. Test the exact candidate on the console.
-7. Record the result in `docs/VALIDATION.md`.
-8. Commit the source and documentation changes.
-9. Push the reviewed commit to this source repository.
+3. Build the candidate with `make build` if native code changed.
+4. Test the candidate on the console and record the result in
+   [Validation](VALIDATION.md).
+5. Commit the source and the documentation.
+6. Push the commit.
 
-A documentation change does not require a native rebuild.
-A new native build can have a different hash because the build includes time-dependent metadata.
-Pinned inputs alone do not establish byte-for-byte reproducibility.
+The release workflow builds on macOS when you push a version tag. It runs the
+host checks, builds the native title and helpers, packages the artifacts, and
+creates a GitHub release with the assets below.
 
-## Package the candidate
+```sh
+git tag v0.1.0-alpha.1
+git push origin v0.1.0-alpha.1
+```
+
+A documentation change needs no native rebuild. A new native build can carry
+different bytes because the build records the build date and time.
+
+## Package locally
 
 Run the package command from a Git checkout:
 
@@ -36,65 +40,51 @@ Run the package command from a Git checkout:
 make release
 ```
 
-The output is:
-
-```text
-release/nuvio-ps5-0.1.0-alpha.1.zip
-release/SHA256SUMS
-```
-
-The package script checks native file hashes and helper ELF hashes.
-It accepts only the expected helper inventory.
-It includes UI files with permitted extensions.
-It also includes tracked and unignored source files from the checkout.
-Run `make check` before packaging to check that source inventory.
-
-| Archive path | Contents |
+| Artifact | Contents |
 |---|---|
-| `app/PPSA99997/` | Generated native folder title |
-| `ui/` | Built browser UI |
-| `helpers/` | Fixed-purpose ELF helpers |
-| `source/` | Integration source, patches and documentation |
-| `build.json` | Native, helper and input hashes |
-| `MANIFEST.sha256` | Hashes for packaged files |
+| `PPSA99997.zip` | The `<TITLEID>/` app folder. This is the store artifact. |
+| `nuvio-ps5-<version>.zip` | The complete package: app, UI, helpers, source, receipts. |
+| `helpers/*.elf` | The helper payloads on their own, for Payload Manager. |
+| `payloads.json` | A Payload Manager source listing the helpers with hashes. |
+| `SHA256SUMS` | Hashes for the release assets. |
 
-The packaging script does not download account state from the console.
-It does not include ignored cache, configuration, log or build source directories.
-The receipt covers native files and helpers.
-The archive manifest also covers the packaged UI and source files.
+`PPSA99997.zip` unpacks to a single `PPSA99997/` folder. Users copy that folder
+to `/data/homebrew/`. The complete package keeps the source and the UI for a
+scripted install.
 
-The archive layout differs from a source build directory.
-The install scripts expect the source builder's output layout.
-They do not consume the archive directly.
-Use the documented source build procedure for scripted installation.
-The archive supplies folder-title artifacts for a deliberate manual deployment.
-It does not provide a retail package or one-click installer.
+The package script checks the native file hashes and the helper ELF hashes. It
+accepts only the expected helper inventory. The receipt covers the native files
+and the helpers. The archive manifest covers the packaged UI and source files.
 
-## Public release policy
+## Store listing
 
-This public source repository has no binary release.
-Local packages remain development artifacts until acceptance and source review are complete.
-Do not upload local archives as part of a source update.
+The [PS5 Homebrew Store catalog](https://github.com/blackbearreloaded/ps5-homebrew-catalog)
+lists native PS5 homebrew by title ID. The record lives at `apps/PPSA99997.json`
+in that repository and pins one release asset by SHA-256.
 
-Before creating a public binary prerelease:
+The catalog needs:
 
-1. Complete the binary distribution checks below.
-2. Record the exact candidate's validation results.
-3. Include complete corresponding sources and required notices.
-4. Create release notes identifying the candidate hash and remaining limitations.
-5. Publish only after the owner's binary-release instruction.
+- A native title with `eboot.bin` and `sce_sys/param.json`, which this project
+  builds.
+- A public GitHub release with the `PPSA99997.zip` asset attached.
+- An icon at a stable HTTPS URL, pinned to a tag. Use `assets/icon.png`.
+- The SHA-256 of the release asset.
 
-## Before public binary distribution
+The daily catalog job follows new releases, so keep the asset name stable and
+raise `contentVersion` each time. Submit an update only when the release changes
+the listing fields.
 
-Complete the pending console acceptance checks.
-Record exact versions when available.
-Keep unknown versions explicit.
-Review all target library licenses and notices.
-Provide complete corresponding sources for distributed GPL components.
-Include the required source revisions, modifications and build instructions.
-The current source directory contains the integration, not every upstream source archive.
+## Payload Manager source
 
-Check the archive for account identifiers, signed URLs and owner configuration.
-Retain public browser configuration only from the pinned official Nuvio package.
-Confirm the repository visibility and release action with the owner's publication instruction.
-Preserve `/data/nuvio` in any upgrade procedure.
+`payloads.json` lists each helper with its download URL and SHA-256. Publish it
+as a release asset. Users add that URL under Sources in PS5 Payload Manager.
+
+## Distribution rules
+
+1. Record the validation result for the exact candidate.
+2. Keep complete corresponding sources for the GPL components you distribute.
+   The source directory holds this integration, not every upstream archive.
+3. Keep upstream notices and licences with the build.
+4. Check the archive for account identifiers, signed URLs and owner
+   configuration.
+5. Keep `/data/nuvio` in any upgrade procedure.

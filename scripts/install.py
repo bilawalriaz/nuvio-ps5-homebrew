@@ -14,9 +14,9 @@ import urllib.parse
 from build import ROOT, WORK, TITLE
 
 
-def helper(action, host):
+def helper(action, host, helper_dir=WORK):
     result = subprocess.run(['python3', str(ROOT/'scripts/upload.py'), '--file',
-                             str(WORK/f'control-{action}.elf')],
+                             str(helper_dir/f'control-{action}.elf')],
                             env=dict(os.environ, PS5_HOST=host),
                             capture_output=True, text=True, timeout=40)
     print(result.stdout, end='')
@@ -42,6 +42,8 @@ def main():
     ap.add_argument('--ftp-port', type=int, default=int(os.environ.get('PS5_FTP_PORT', '0')))
     ap.add_argument('--origin', required=True, help='Nuvio UI HTTP origin reachable from PS5')
     ap.add_argument('--launch', action='store_true')
+    ap.add_argument('--from-release', type=Path, metavar='DIR',
+                    help='Install from an unpacked release archive instead of a source build')
     args = ap.parse_args()
     if not args.host or not args.ftp_port:
         ap.error('Set --host and --ftp-port (or PS5_HOST and PS5_FTP_PORT); no address discovery is performed.')
@@ -51,11 +53,20 @@ def main():
     # Provider uses a fixed 128-byte host buffer. Validate before serialization.
     if len(origin.hostname.encode()) > 127 or any(c in origin.hostname for c in '\r\n='):
         ap.error('Invalid provider host')
-    receipt = json.loads((WORK/'build.json').read_text())
+    if args.from_release:
+        release = args.from_release.resolve()
+        receipt = json.loads((release/'build.json').read_text())
+        dist = release/'app'/TITLE
+        helper_dir = release/'helpers'
+        if not dist.is_dir() or not helper_dir.is_dir():
+            raise RuntimeError('Release directory needs app/'+TITLE+' and helpers/')
+    else:
+        receipt = json.loads((WORK/'build.json').read_text())
+        pin = next(p for p in json.loads((ROOT/'deps.lock').read_text())['artifacts'] if p['id']=='evo-player-nuvio-source')
+        dist = WORK/pin['directory']/'output/app'/TITLE
+        helper_dir = WORK
     if receipt['title_id'] != TITLE:
         raise RuntimeError('Build receipt title mismatch')
-    pin = next(p for p in json.loads((ROOT/'deps.lock').read_text())['artifacts'] if p['id']=='evo-player-nuvio-source')
-    dist = WORK/pin['directory']/'output/app'/TITLE
     # Validate the complete local receipt before opening the console connection.
     for name, expected in receipt['files'].items():
         relative = PurePosixPath(name)
@@ -107,7 +118,7 @@ def main():
             ftp.retrbinary('RETR '+stage+'/'+name, actual.update)
             if actual.hexdigest() != expected:
                 raise RuntimeError('Staged hash mismatch: '+name)
-        output = helper(4, args.host)
+        output = helper(4, args.host, helper_dir)
         expected = receipt['files']['sce_module/libc.prx']
         if 'sha256='+expected not in output:
             raise RuntimeError('Console runtime hash does not match receipt')
@@ -130,14 +141,14 @@ def main():
         ftp.rename(stage, destination)
     print('Staged hashes verified; installed:', destination)
     print('Registering with ShadowMount (asynchronous):')
-    helper(1, args.host)
+    helper(1, args.host, helper_dir)
     if args.launch:
-        status = helper(2, args.host)
+        status = helper(2, args.host, helper_dir)
         compact = ''.join(status.split())
         if '"installed":true' not in compact:
             raise RuntimeError('Registration is pending. Run control-2, then control-3 when installed:true.')
         # Control-3 refuses a resident big app. Never closes an unrelated title.
-        helper(3, args.host)
+        helper(3, args.host, helper_dir)
     print('Installation is not rendering or playback evidence; inspect klog and the TV.')
 
 

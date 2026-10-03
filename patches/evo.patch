@@ -146,8 +146,8 @@
          return true;
      }
      if (pressed & PadButtons::Circle) {
-+        // Nuvio's Back stops the native session; the existing bridge then reopens it.
-+        // Native-only playback retains its confirmation and other overlays.
++        // Nuvio Back stops the native session; the existing bridge reopens it.
++        // Native-only playback retains confirmation and the other overlays.
 +        if (!evo_webui_native_requested()) {
 +            playback->stopPlayback();
 +            if (screenMgr) screenMgr->returnFromPlayback();

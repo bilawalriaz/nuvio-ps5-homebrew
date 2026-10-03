@@ -1,31 +1,35 @@
 # Validation
 
-## Current result
+## What the console tests show
 
-[TESTED-ON-CONSOLE] The owner confirmed QR login, addon sync, focused activation, playback and resumed seeking on the baseline build.
-The owner also confirmed native EVO addon browsing and playback.
-The first branded build started with Nuvio artwork, but its playback exit failed.
-The corrected exit build stopped the decoder and reopened the browser in the console log.
-[UNKNOWN] The visible page after that correction still needs owner confirmation.
+The test console is a retail PS5 on firmware 13.60.
 
-Host results establish build and regression behavior.
-Console logs establish the recorded native actions.
-TV observations establish visible behavior.
-Keep these results separate.
+| Check | Result |
+|---|---|
+| QR login and addon sync | Works. |
+| Focused X activation | Works. X activates the selected Nuvio element. |
+| Native playback | Works. The log shows `sceVideodec2` decoding H.264 at 1920x800 and 3840x1600. |
+| Resumed seeking | Works. Seeking resumes after a short delay. |
+| Native EVO addon browsing | Works. |
+| Nuvio-branded startup | Works. |
+| Playback exit | The log shows the decoder closing and the browser reopening. The restored page itself has no recorded check yet. |
 
-## Evidence terms
+Host checks cover the build and the regression tests. Console logs cover the
+recorded native actions. TV observations cover visible behavior. Keep the three
+apart.
+
+## Evidence labels
 
 | Label | What the result establishes |
 |---|---|
 | `[SOURCE-VERIFIED]` | Inspected implementation or a fixed source declaration. |
 | `[LOCALLY BUILT]` | Host build, check or mock result. |
-| `[TESTED-ON-CONSOLE]` | A recorded console response, console log or owner observation. |
+| `[TESTED-ON-CONSOLE]` | A recorded console response, console log or TV observation. |
 | `[UNKNOWN]` | No sufficient result for this claim. |
 
-Each console result applies to its recorded environment and artifact.
-A result for one hash does not certify a later build.
-The generated receipt keeps `firmware_validation` as `[UNKNOWN]`.
-This document records hardware evidence separately.
+Each console result applies to its recorded environment and artifact. A result
+for one hash does not certify a later build. The generated receipt keeps
+`firmware_validation` as `[UNKNOWN]`.
 
 ## Test environment, 2026-10-01
 
@@ -42,59 +46,54 @@ This document records hardware evidence separately.
 | FTP | etaHEN service, TCP 1337 observed |
 | Native title | `PPSA99997` |
 
-The original session record remains in the development workspace's `docs/HARDWARE_TEST_LOG.md`.
-That workspace is `ps5-homebrew-dev`.
-The portable record below omits private addresses and source URLs.
-Unknown resident versions remain unknown.
+The original session record stays in the private development workspace
+`ps5-homebrew-dev`. It holds the private addresses and source URLs. The record
+below omits both, and it keeps unknown resident versions as unknown.
 
 ## Artifact history
 
 | Artifact | SHA-256 | Result |
 |---|---|---|
 | Initial native eboot | `f1f1ddac11d47e7e2ffda7b53d0cd857ce960188342f9c66849f58c4a41eed49` | Browser permission failure, then onboarding after promotion |
-| Corrected seek eboot | `8ebe32224ba49a71317578f5817ee6df073b95257cd8ef49f7131508fe742483` | Owner confirmed resumed seeking and native addon comparison |
-| First branded eboot | `c4c02603f479325acfa4031c12c7e0dedc31c758de3c3980728260dfb0ff18b5` | Owner confirmed startup branding and reported hidden exit confirmation |
-| Corrected exit eboot | `4989d4cabd1f37ade588b2eff66bbb0f1459977ff13aed9e66f93ace4ecd67a8` | Decoder stop and browser reopening logged, visual route result pending |
-| Generated runtime | `e6ff45d16adf687855cc3b33b0c8a4132b6504360b221e0a34c7e99fb3ba0036` | Hash checked on console, unchanged through these updates |
-| Resident watcher | `8cf4bbe0b889b9063a5775b541027f87a2f5599889e655999a0530eaaec83d89` | Ready message and a later title launch without manual promotion |
+| Corrected seek eboot | `8ebe32224ba49a71317578f5817ee6df073b95257cd8ef49f7131508fe742483` | Resumed seeking and native addon comparison observed |
+| First branded eboot | `c4c02603f479325acfa4031c12c7e0dedc31c758de3c3980728260dfb0ff18b5` | Startup branding observed. Circle left a hidden exit confirmation |
+| Corrected exit eboot | `4989d4cabd1f37ade588b2eff66bbb0f1459977ff13aed9e66f93ace4ecd67a8` | Decoder stop and browser reopening in the log |
+| Generated runtime | `e6ff45d16adf687855cc3b33b0c8a4132b6504360b221e0a34c7e99fb3ba0036` | Hash checked on the console. Unchanged through these updates |
+| Resident watcher | `8cf4bbe0b889b9063a5775b541027f87a2f5599889e655999a0530eaaec83d89` | Ready message, and a later title launch without manual promotion |
 
-The rebuilt watcher differs from the resident watcher.
-The rebuilt artifact includes SIGPIPE handling.
-It did not replace the resident watcher in this session.
-A future upload needs its own hash and boot record.
+The rebuilt watcher adds SIGPIPE handling, so it differs from the resident
+watcher. It did not replace the resident watcher in this session. Each new upload
+needs its own hash and boot record.
 
 ## Initial network and input failures
 
 Expected: the title opens Nuvio and allows onboarding.
-Observed: EVO rendered, then browser error `WV-109145-0` returned to EVO.
-The native log showed host preflight success and loopback bind failure with `errno=13`.
-The confined promotion helper applied the required credentials and checked them again.
-The proxy then listened, and the owner confirmed the Nuvio page.
+Observed: EVO rendered, then browser error `WV-109145-0` returned to EVO. The
+native log showed host preflight success and loopback bind failure with
+`errno=13`. The permission helper applied the required credentials and read them
+back. The proxy listened, and the Nuvio page loaded.
 
 Expected: X activates the D-pad selection.
-Observed: X initially clicked the fixed browser pointer over the QR area.
-The input bridge changed activation to the focused Nuvio element.
-The owner then confirmed guest continuation, QR login and addon sync.
-The official TV package supplied the public login configuration.
+Observed: X first clicked the fixed browser pointer over the QR area. The input
+bridge moved activation to the focused Nuvio element. Guest continuation, QR
+login and addon sync then worked. The official TV package supplied the public
+login configuration.
 
-Recovery: the owner closed and relaunched the title when requested.
-No console firmware, exploit DNS or system file changed.
-A reboot was unnecessary.
+Recovery: closed and relaunched the title. No firmware, exploit DNS or system
+file changed, and no reboot occurred.
 
 ## Baseline native playback and seeking
 
 Expected: a stream opens, native frames appear, and seeking resumes playback.
-One early source returned HTTP 403 before the decoder started.
-Another source played successfully.
-The original seek guard rejected provider playback with an empty local path.
-The controller still entered seeking, and the owner reported a permanent freeze.
 
-The corrected seek build accepted valid provider demuxers.
-The owner confirmed that seeking resumed, with some delay compared with other devices.
-The log identified native H.264 decoding at 1920×800 and 3840×1600.
-One recorded seek settled in 1107 milliseconds.
+One source returned HTTP 403 before the decoder started. Another source played.
+The original seek guard rejected provider playback with an empty local path, and
+the controller still entered seeking, which froze playback.
 
-Filtered excerpt:
+The corrected seek build accepts valid provider demuxers. Seeking then resumed,
+with some delay compared with other devices. The log identified native H.264
+decoding at 1920x800 and 3840x1600. One recorded seek settled in 1107
+milliseconds.
 
 ```text
 PlaybackController: video decoder opened (backend=NATIVE (sceVideodec2), codec=27, 1920x800 @ 23.98 fps)
@@ -104,58 +103,34 @@ bc SEEK_SETTLE ms=1107 disc=12 pts=165.249 vrel=0.000 arel=0.000 aq=9
 EVO vdec native: CLOSE decodes=190 framesout=169 fatal=0
 ```
 
-The owner closed the title before its update.
-The updater checked old files, staged bytes and backups under `/data`.
-It imported five private synced addons and the local test addon into native settings.
-A separate standalone EVO settings directory was absent.
-A fresh title launch returned `launch_result=0x8018` and started the proxy without manual promotion.
-
-Original development commands used exported private addresses:
-
-```sh
-python3 apps/nuvio/update.py \
-  --previous-receipt /path/to/initial-build.json \
-  --sync-addons \
-  --test-addon "http://HOST_ADDRESS:4173/ps5-test/manifest.json"
-python3 tools/ps5ctl.py upload --file /path/to/control-3.elf
-```
-
-These commands ran in `ps5-homebrew-dev`, not this standalone repository.
-The standalone equivalents are in [Operations](OPERATIONS.md).
+The updater checked old files, staged bytes and backups under `/data`. It
+imported five private synced addons and the local test addon into the native
+settings. A fresh title launch returned `launch_result=0x8018` and started the
+proxy without manual promotion.
 
 ## Branded startup and exit correction
 
-Expected: automatic startup and playback transitions hide EVO menus.
-The first branded update replaced eboot, icon, launch images, loading RML and wordmark.
-Control-2 reported an installed folder with `mounted:false` before replacement.
-The updater checked predecessors, backups and new bytes.
-Control-3 reported `running_big_app=-1` and `launch_result=0x4018`.
-The console fetched the rebuilt UI assets with HTTP 200.
+Expected: automatic startup and playback transitions hide the EVO menus.
 
-The owner confirmed Nuvio-branded startup.
-Circle then displayed `Opening Nuvio` without stopping playback.
-A second Circle returned to video.
-[SOURCE-VERIFIED] The loading screen hid the native exit confirmation while playback remained active.
+The first branded update replaced eboot, icon, launch images, loading RML and
+wordmark. `control-2` reported an installed folder with `mounted:false` before
+the replacement. The updater checked predecessors, backups and new bytes.
+`control-3` reported `running_big_app=-1` and `launch_result=0x4018`. The console
+fetched the rebuilt UI assets with HTTP 200.
 
-The correction stops Nuvio playback directly on Circle.
-It preserves active playback overlays and native settings confirmation.
-The owner closed the title before the corrected eboot update.
-The updater checked predecessor, backup and replacement hashes.
-The corrected launch returned `running_big_app=-1` and `launch_result=0xe018`.
+Nuvio-branded startup worked. Circle then displayed `Opening Nuvio` without
+stopping playback, and a second Circle returned to video.
+[SOURCE-VERIFIED] The loading screen hid the native exit confirmation while
+playback stayed active.
 
-Standalone commands used exported private addresses:
+The correction stops Nuvio playback directly on Circle. It keeps active playback
+overlays and the native settings confirmation. The corrected launch returned
+`running_big_app=-1` and `launch_result=0xe018`.
 
-```sh
-python3 scripts/update.py \
-  --previous-receipt config/installed-polished-build.json
-python3 scripts/upload.py --file build/control-3.elf
-```
-
-The corrected log identifies build `21524a4a-nuvio_1001-1551`.
-It opened a native decoder with codec 173 at 1920×1080.
-It settled a seek in 1662 milliseconds.
-It closed the decoder with 263 decodes, 253 output frames and no fatal result.
-It then reopened the browser successfully.
+The corrected log identifies build `21524a4a-nuvio_1001-1551`. It opened a native
+decoder with codec 173 at 1920x1080, settled a seek in 1662 milliseconds, closed
+the decoder with 263 decodes and 253 output frames and no fatal result, then
+reopened the browser.
 
 ```text
 bc SEEK_SETTLE ms=1662 disc=42 pts=358.733 vrel=0.000 arel=0.000 aq=9
@@ -163,33 +138,31 @@ EVO vdec native: CLOSE decodes=263 framesout=253 fatal=0
 web: sceWebBrowserDialogOpen -> 0x00000000
 ```
 
-Recovery backups remain below `/data/homebrew/ps5-homebrew-dev`.
-The runtime and artwork stayed unchanged during the exit correction.
-No reboot or system write occurred.
-[UNKNOWN] The visible restored route still needs owner confirmation.
+Recovery backups stay below `/data/homebrew/ps5-homebrew-dev`. The runtime and the
+artwork did not change during the exit correction. No reboot or system write
+occurred.
 
 ## Host coverage
 
-[LOCALLY BUILT] Eight host regressions pass for the current code.
-They check the HTTP handler, browser focus, provider seek, control responses, saved routes and Circle behavior.
-The seek and Circle tests execute patched upstream code with host fixtures.
-These tests do not use a console or PS5 SDK.
-GitHub CI runs the host checks on Ubuntu.
-The native title itself builds through the macOS adapter.
+[LOCALLY BUILT] Eight host regressions pass. They cover the HTTP handler, browser
+focus, provider seek, control responses, saved routes and Circle behavior. The
+seek and Circle tests run the patched upstream code against host fixtures. These
+tests use no console and no PS5 SDK. GitHub CI runs the host checks on Ubuntu.
+The native title builds through the macOS adapter.
 
 ## Acceptance procedure
 
-Use a receipt for the exact installed artifact.
-Keep a filtered private log and a record of visible behavior.
+Use a receipt for the exact installed artifact. Keep a filtered private log and a
+record of the visible behavior.
 
-1. Start from a fresh jailbreak when testing boot behavior.
-2. Upload exactly one watcher for that boot.
+1. Start from a fresh jailbreak when you test boot behavior.
+2. Push exactly one watcher for that boot.
 3. Launch the title.
 4. Check Nuvio branding during startup.
 5. Check guest access and focused X activation.
 6. Check QR login and addon sync.
 7. Play the generated test clip.
-8. Check the moving picture and tone.
+8. Check the moving picture and the tone.
 9. Pause and resume playback.
 10. Seek forward and backward several times.
 11. Press Circle once.
@@ -198,15 +171,14 @@ Keep a filtered private log and a record of visible behavior.
 14. Check native addon playback and its stop confirmation.
 15. Close the title through the app switcher.
 16. Relaunch the title.
-17. Record any subtitles, formats or session durations tested.
+17. Record the subtitles, formats and session durations you tested.
 
-Generated test picture/audio, pause, subtitles and longer stability remain pending.
-Fresh-boot behavior with the rebuilt watcher also remains pending.
-Complete these checks before public release.
+Generated test picture and audio, pause, subtitles and longer stability are still
+open. Fresh-boot behavior with the rebuilt watcher is also open.
 
-## Record a new console result
+## Record a new result
 
-Include all fields below:
+Include every field below.
 
 | Field | Required record |
 |---|---|
@@ -214,9 +186,9 @@ Include all fields below:
 | Artifact | Source pins, eboot hash, runtime hash and helper hashes |
 | Command | Exact command with private values removed from the public copy |
 | Expected result | Visible behavior or response that defines success |
-| Observed result | Owner observation and filtered console evidence |
+| Observed result | What the TV showed and the filtered console evidence |
 | Recovery | Close, rollback, reboot or other action actually used |
-| Limits | Pending tests and unknown version identities |
+| Limits | Open tests and unknown version identities |
 
-Preserve failed attempts when adding corrected results.
-Keep raw logs, receipts with private state and account data outside Git.
+Keep failed attempts when you add a corrected result. Keep raw logs and receipts
+with private state outside Git.
