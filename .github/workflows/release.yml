@@ -73,9 +73,4 @@ jobs:
         run: |
           args=(--title "Nuvio PS5 ${GITHUB_REF_NAME}" --generate-notes)
           case "${GITHUB_REF_NAME}" in *alpha*|*beta*|*rc*) args+=(--prerelease) ;; esac
-          gh release create "${GITHUB_REF_NAME}" "${args[@]}" \
-            release/PPSA99997.zip \
-            release/nuvio-ps5-*.zip \
-            release/nuvio.elf \
-            release/payloads.json \
-            release/SHA256SUMS
+          gh release create "${GITHUB_REF_NAME}" "${args[@]}" $(cat release/ASSETS)

@@ -3,7 +3,7 @@
 ## Get a release instead
 
 Most users do not build anything. Download `PPSA99997.zip` from the
-[latest release](https://github.com/bilawalriaz/nuvio-ps5-homebrew/releases/latest)
+[latest release](https://github.com/bilawalriaz/nuvio-ps5-homebrew/releases)
 and follow [Operations](OPERATIONS.md). Build from source only to change the
 port or to test native code.
 

@@ -54,6 +54,10 @@ make release
 `/data/homebrew/` and push `nuvio.elf` once per boot. The complete package keeps
 the source, the browser UI and the build helpers for a scripted install.
 
+`make release` recreates `release/` and writes `release/ASSETS` with the exact
+asset paths. The release workflow uploads those paths, so a stale local file
+cannot reach a release.
+
 The package script checks the native file hashes and the helper ELF hashes. It
 accepts only the expected helper inventory. The receipt covers the native files
 and the helpers. The archive manifest covers the packaged UI and source files.

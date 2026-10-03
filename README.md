@@ -7,7 +7,7 @@ Player's native engine. Nuvio supplies the account, catalogue and addon screens.
 EVO supplies the controller input, audio and hardware video decoding.
 
 This is a community project with no connection to Sony, NuvioMedia or EVO Player.
-Version `0.1.0-alpha.1`.
+Version `0.1.0-alpha.2`.
 
 ## What it does
 
@@ -29,7 +29,7 @@ Version `0.1.0-alpha.1`.
 ## Install
 
 1. Download `nuvio-ps5-<version>.zip` from the
-   [latest release](https://github.com/bilawalriaz/nuvio-ps5-homebrew/releases/latest)
+   [latest release](https://github.com/bilawalriaz/nuvio-ps5-homebrew/releases)
    and unpack it. The PS5 Homebrew Store also carries the title alone as
    `PPSA99997.zip`.
 2. Copy the `PPSA99997` folder to `/data/homebrew/` on the console over FTP. The

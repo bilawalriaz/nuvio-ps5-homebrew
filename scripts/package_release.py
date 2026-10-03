@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 import argparse
 import hashlib
 import json
+import shutil
 import zipfile
 import subprocess
 from build import ROOT, WORK, TITLE, digest
@@ -132,7 +133,9 @@ def main():
     dist = WORK / pin['directory'] / 'output/app' / TITLE
     helpers = helper_inventory(receipt)
     out = ROOT / 'release'
-    out.mkdir(exist_ok=True)
+    if out.exists():
+        shutil.rmtree(out)
+    out.mkdir()
     assets = []
     store = out / (TITLE + '.zip')
     write_store_zip(receipt, dist, store)
@@ -153,6 +156,8 @@ def main():
     write_payloads_json(version, tag, args.repo, PUBLIC_HELPERS, payloads)
     assets.append(payloads)
     (out / 'SHA256SUMS').write_text(''.join(digest(p) + '  ' + p.name + '\n' for p in assets))
+    assets.append(out / 'SHA256SUMS')
+    (out / 'ASSETS').write_text(''.join(str(p.relative_to(ROOT)) + '\n' for p in assets))
     print('Store artifact:', store, digest(store))
     print('Package:', full, digest(full))
     print('Payload source:', payloads, 'tag', tag)
