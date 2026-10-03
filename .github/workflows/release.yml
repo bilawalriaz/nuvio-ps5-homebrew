@@ -21,11 +21,12 @@ jobs:
           path: .cache
           key: nuvio-inputs-${{ hashFiles('deps.lock') }}
       - name: Install host tools
-        run: brew install llvm coreutils
-      - name: Add LLVM and coreutils to PATH
+        run: brew install llvm coreutils grep
+      - name: Add LLVM, coreutils and grep to PATH
         run: |
           echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
           echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix grep)/libexec/gnubin" >> "$GITHUB_PATH"
       - name: Check
         run: make check
       - name: Build
@@ -35,17 +36,26 @@ jobs:
         run: |
           command -v grep || true
           grep --version 2>&1 | head -3 || true
+          file "$(command -v grep)" || true
+          echo "LANG=${LANG:-unset} LC_ALL=${LC_ALL:-unset}"
           for d in build/EVO-PLAYER-PS5-*/output/app/.build/runtime-shim; do
             [ -d "$d" ] || continue
             ls -l "$d" || true
-            for f in "$d"/*.raw.elf "$d"/*.prx; do
-              [ -f "$f" ] || continue
-              if grep -aFq BlackBearReloaded "$f"; then
-                echo "MARKER PRESENT: $f"
-              else
-                echo "MARKER MISSING: $f"
-              fi
+            f="$d/libc-a.raw.elf"
+            shasum -a 256 "$f" || true
+            python3 - "$f" <<'PY' || true
+          import sys
+          data = open(sys.argv[1], 'rb').read()
+          print('python size', len(data), 'marker', data.count(b'BlackBearReloaded'))
+          PY
+            for a in -aFq -aqF -Fq -aq; do
+              if grep $a BlackBearReloaded "$f"; then echo "grep $a OK"; else echo "grep $a rc=$?"; fi
             done
+            if "$(brew --prefix grep)/bin/ggrep" -aFq BlackBearReloaded "$f"; then
+              echo "ggrep OK"
+            else
+              echo "ggrep rc=$?"
+            fi
           done
       - name: Package
         run: python3 scripts/package_release.py --tag "${GITHUB_REF_NAME}"
