@@ -94,3 +94,8 @@ as a release asset. Users add that URL under Sources in PS5 Payload Manager.
 4. Check the archive for account identifiers, signed URLs and private
    configuration.
 5. Keep `/data/nuvio` in any upgrade procedure.
+
+## Announce the release
+
+[Announcement notes](LAUNCH.md) hold a short description, the demonstration plan
+and drafts for Hacker News and r/ps5homebrew.

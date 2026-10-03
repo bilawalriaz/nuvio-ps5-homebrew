@@ -2,15 +2,17 @@
 
 How to describe Nuvio PS5 and where to announce it.
 
-## Describe the project
+## Short description
 
-Call it a community Nuvio TV integration with EVO native playback on a
-jailbroken PS5. Credit NuvioMedia for the UI and the EVO contributors for the
-player and the browser bridge.
+> Nuvio PS5 runs Nuvio TV on a jailbroken PlayStation 5 and plays streams with
+> EVO Player's native engine. The console serves its own browser interface, so no
+> computer has to stay on. One payload grants the title its network privilege and
+> serves the interface over loopback.
 
-This port adds macOS builds, focused controller input, provider seeking, Nuvio
-branding, playback exit and route restoration. It adds no decoder, no exploit
-and no support for other firmware.
+Credit NuvioMedia for the UI and the EVO contributors for the player and the
+browser bridge. This port adds macOS builds, focused controller input, provider
+seeking, Nuvio branding, playback exit and route restoration. It adds no decoder,
+no exploit and no support for other firmware.
 
 ## Before you announce
 
@@ -25,7 +27,7 @@ The file scanner covers tracked and unignored files. Review account identifiers,
 LAN addresses, signed URLs and logs by hand, and keep private receipts and raw
 hardware logs out of the repository.
 
-An announcement keeps the alpha status and the open tests. The package carries
+Keep the alpha status and the open tests in the announcement. The package carries
 the integration source, not every upstream archive, so do not call it a complete
 corresponding-source bundle.
 
@@ -33,16 +35,16 @@ corresponding-source bundle.
 
 Use the generated test addon and clip in [Operations](OPERATIONS.md).
 
-Record startup, D-pad focus, playback, seeking, one Circle press and the
-restored page. Show the generated tone, and pause and resume during the test.
-Keep account QR codes, addon URLs and private settings out of the recording.
-Record real console footage.
+Record startup, D-pad focus, playback, seeking, one Circle press and the restored
+page. Show the generated tone, and pause and resume during the test. Keep account
+QR codes, addon URLs and private settings out of the recording. Record real
+console footage, not a mockup.
 
 ## Hacker News notes
 
 [Hacker News guidelines](https://news.ycombinator.com/newsguidelines.html) ask
-for your own words, so write the submission and the replies yourself. These
-notes only supply the facts.
+for your own words, so write the submission and the replies yourself. These notes
+only supply the facts.
 
 [Show HN guidance](https://news.ycombinator.com/showhn.html) asks for something
 people can try. A hardware project can include a video, and this one has a
@@ -55,7 +57,10 @@ Points to cover:
 - How the app recreates the browser around native playback.
 - The rejected provider seek and what it did to the playback state machine.
 - The loopback bind permission that file access did not grant.
-- One tested firmware, macOS builds and a self-contained console UI server.
+- The link-order fault that made the first rebuild import the browser-safe kernel
+  stub instead of `libkernel.prx`.
+- The payload timing that decides between a faulted process and a failed bind.
+- One tested firmware and a console that serves its own interface.
 - The open limits and the help you want.
 
 Do not ask for votes or coordinate comments.
@@ -75,18 +80,22 @@ confirm a release, and never upload private files to a scanning service.
 > those foundations.
 >
 > My changes cover macOS builds, controller focus, provider seeking, Nuvio
-> branding and playback return behavior. On my 13.60 console I confirmed QR
-> login, addon sync, playback and seeking that resumes. The latest exit fix logs
-> decoder stop and browser reopening.
+> branding and playback return behavior. The console serves the browser
+> interface itself, so no computer has to stay on. One payload grants the title
+> its network privilege and serves the interface over loopback.
+>
+> On my 13.60 console I confirmed QR login, addon sync, playback and resumed
+> seeking. The release logs the decoder stop and the browser reopening.
 >
 > This is an alpha. It needs a jailbreak each boot, a loader, FTP and
-> ShadowMount, and one payload pushed per boot. The console serves its own UI, so
-> no computer has to stay on. Native builds need macOS. The payload accepts
-> firmware 13.60 only. Pause, subtitles, fresh-boot behavior and long sessions
-> still need testing.
+> ShadowMount, and one payload pushed per boot. Native builds need macOS. The
+> payload accepts firmware 13.60 only. Pause, subtitles, fresh-boot behavior and
+> long sessions still need testing.
 >
 > Downloads and build instructions:
 > https://github.com/bilawalriaz/nuvio-ps5-homebrew
 >
 > Firmware-specific testing and reproducible bug reports help. Keep account
 > details and private stream URLs out of reports.
+
+Add a demo link and a store link only after each one exists.

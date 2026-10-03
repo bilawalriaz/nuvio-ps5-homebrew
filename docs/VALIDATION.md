@@ -173,34 +173,33 @@ records `BUILD 21524a4a-nuvio-dirty_1003-1441`, the proxy hook injected into `/`
 response is still not execution: check `promote.elf` and the log build string
 every time.
 
-[TESTED-ON-CONSOLE] The owner reports that a launch sometimes needs several
-attempts before the title stays up. One attempt in this session was lost the same
-way. Treat a single failed launch as inconclusive and retry before recording a
-failure.
+[TESTED-ON-CONSOLE] A launch sometimes needs several attempts before the title
+stays up. One attempt in this session failed the same way. Treat a single failed
+launch as inconclusive and retry before you record a failure.
 
-[TESTED-ON-CONSOLE] The owner reported the whole app failing to load any catalog
-entry or thumbnail during this session. The cause was the console's DNS
-connectivity, not this change. The app recovered when connectivity did.
+[TESTED-ON-CONSOLE] During this session, catalogue entries and thumbnails failed
+to load across the app. The console's DNS connectivity caused it, not this
+change. The app recovered when connectivity did.
 
-[LOCALLY BUILT] The owner reported a white flash between the native splash screen
-and the Nuvio interface when a stream exits, visible in a dark room. The served
+[LOCALLY BUILT] A white flash appears between the native splash screen and the
+Nuvio interface when a stream exits, visible in a dark room. The served
 `index.html` carries
 `<style>html,body{background-color:#000;margin:0}</style>` as its first head
 element, applied through `patch_index()` and covered by host tests.
 
-A `media="print"` stylesheet switched to `all` on load was tried to stop the
-544 KB `css/bundle.css` holding the first paint back. The console's browser then
-rendered Nuvio unstyled, so the pattern is not usable here and the sheet is a
-plain render-blocking `<link>` again. Owner confirmation of the transition is
-pending.
+The port tried a `media="print"` stylesheet that switched to `all` on load, to
+stop the 544 KB `css/bundle.css` holding back the first paint. The console's
+browser then rendered Nuvio unstyled, so the pattern is not usable here and the
+build keeps the plain render-blocking `<link>`. The visible transition still
+needs a console check.
 
-[TESTED-ON-CONSOLE] The title icon was replaced with the repository artwork in
-`assets/icon.png` (512x512). The console copy verified byte-for-byte at
-`90ed6493`, and the previous icon (1fe88349) is kept under
+[TESTED-ON-CONSOLE] The build now installs the repository artwork in
+`assets/icon.png` (512x512) as the title icon. The console copy verified
+byte-for-byte at `90ed6493`, and the previous icon (1fe88349) stays under
 `/data/homebrew/ps5-homebrew-dev`. The PS5 caches a title icon. A second
 registration reported `changed:false` and left the icon URL stamp at
 `v=1790864733-28006`, so the home-screen tile keeps the old artwork until the
-title record is recreated.
+console recreates the title record.
 
 ## Console serves its own UI, 2026-10-03
 
@@ -230,8 +229,8 @@ machine, but the title's proxy did not load the page from that address
 accept loop inside the payload bound the port and then stopped answering. The
 payload now drives one single-threaded accept loop from its own thread of control.
 
-Owner confirmation of the visible transition is still pending. The session found
-the credential timing that blocked the launch later the same day, in
+The visible transition still needs a console check. The session found the
+credential timing that blocked the launch later the same day, in
 [Console UI working end to end](#console-ui-working-end-to-end-2026-10-03).
 
 ## Console UI working end to end, 2026-10-03
@@ -304,8 +303,8 @@ record of the visible behavior.
 17. Record the subtitles, formats and session durations you tested.
 
 Generated test picture and audio, pause, subtitles and longer stability are still
-open. Fresh-boot behavior with the console UI payload is also open, and the owner
-has still to confirm the visible playback-return transition.
+open. Fresh-boot behavior with the console UI payload is also open, and the
+visible playback-return transition still needs a console check.
 
 ## Record a new result
 
