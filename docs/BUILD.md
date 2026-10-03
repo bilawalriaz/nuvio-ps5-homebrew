@@ -21,6 +21,14 @@ install the tools below yourself. The builder never installs or updates them.
 | Apple command-line tools | Version not recorded | macOS converter and SDK paths |
 | FFmpeg | Version not recorded | Optional generated test clip |
 
+```sh
+brew install llvm lld coreutils
+```
+
+Install the `lld` formula as well as `llvm`. Homebrew keeps `ld.lld` outside the
+LLVM prefix from LLVM 19 on, and the SDK linker wrapper reads the `lld` formula
+prefix.
+
 Python 3.12 is the minimum in `deps.lock`. The recorded host test uses Python
 3.13.7. A different host version needs a new build record. FFmpeg on the computer
 only creates the test clip. EVO uses its own target libraries inside the console.

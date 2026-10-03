@@ -33,6 +33,17 @@ def digest(p):
         return hashlib.file_digest(f, 'sha256').hexdigest()
 
 
+def lld_available():
+    """prospero-lld resolves ld.lld from the LLVM prefix or the lld formula prefix."""
+    if shutil.which('ld.lld'):
+        return True
+    try:
+        prefix = subprocess.check_output(['brew', '--prefix', 'lld'], text=True, stderr=subprocess.DEVNULL).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return False
+    return bool(prefix) and (Path(prefix)/'bin/ld.lld').is_file()
+
+
 def fetch(key):
     pin = next(p for p in json.loads((ROOT/'deps.lock').read_text())['artifacts'] if p['id'] == key)
     p = CACHE / pin.get('cache_file', key+'.zip')
@@ -189,6 +200,8 @@ def main():
         return
     if os.uname().sysname != 'Darwin':
         raise RuntimeError('This native host adapter currently requires macOS.')
+    if not lld_available():
+        raise RuntimeError('ld.lld not found. Install LLVM and the lld formula: brew install llvm lld')
     sdk = WORK/'sdk/ps5-payload-sdk'
     _, sdk_zip = fetch('ps5-payload-sdk-prebuilt')
     with zipfile.ZipFile(sdk_zip) as z:
