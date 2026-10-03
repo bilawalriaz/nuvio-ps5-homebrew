@@ -13,7 +13,7 @@ def main():
         assert re.fullmatch('[0-9a-f]{64}',pin['sha256']),pin['id']
         assert 'latest' not in pin['url']
         if pin.get('commit'):assert re.fullmatch('[0-9a-f]{40}',pin['commit'])
-    for required in ('README.md','LICENSE','docs/ARCHITECTURE.md','docs/VALIDATION.md','docs/RELEASE.md','assets/nuvio.rml','patches/evo.patch','patches/nuvio.patch'):
+    for required in ('README.md','LICENSE','sce_sys/param.json','docs/ARCHITECTURE.md','docs/VALIDATION.md','docs/RELEASE.md','assets/nuvio.rml','patches/evo.patch','patches/nuvio.patch'):
         assert (ROOT/required).is_file(),required
     proc=subprocess.run(['git','ls-files','-z','--cached','--others','--exclude-standard'],cwd=ROOT,capture_output=True)
     files=[ROOT/p.decode() for p in proc.stdout.split(b'\0') if p] if proc.returncode==0 else [p for p in ROOT.rglob('*') if p.is_file() and not any(x in p.relative_to(ROOT).parts for x in ('build','.cache','.git','__pycache__','release','config'))]

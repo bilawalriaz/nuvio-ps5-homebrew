@@ -41,6 +41,10 @@ port never runs a browser inside the native decoder.
 | Public login configuration | Read selected values from the official TV package | Enable the official QR login path |
 | Host build | Adapt the EVO packaging for macOS | Build without a Linux VM |
 
+`sce_sys/param.json` in this repository holds the title identity and content
+version. The build copies those values into the generated title, so a release tag
+carries the metadata a store needs.
+
 `scripts/build.py` and `scripts/polish.py` apply these changes. The generated
 patches show changes to upstream files. The adapters also copy the loading
 artwork and the RML assets. The patches alone do not perform the full build.

@@ -2,10 +2,12 @@
 
 ## Versioning
 
-`VERSION` holds the release version, for example `0.1.0-alpha.1`. The native
-title records its own content version in `sce_sys/param.json` as
-`contentVersion`, for example `01.000.001`. Raise the content version in every
-release so an installed console sees the update.
+`VERSION` holds the release version, for example `0.1.0-alpha.1`. The title
+records its own content version in `sce_sys/param.json` as `contentVersion`, for
+example `01.000.001`. The build copies that file's identity and content version
+into the generated title. Raise the content version in every release so an
+installed console sees the update, and so the store catalog can read it from the
+tag.
 
 The PS5 Homebrew Store catalog accepts pre-release tags. Use a fixed tag such as
 `v0.1.0-alpha.1`, never a moving tag such as `latest` or `nightly`.

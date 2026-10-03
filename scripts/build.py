@@ -95,11 +95,17 @@ def adapt(evo):
     """Keep the native player; open its existing Nuvio bridge at startup."""
     app = evo/'projects/evoplayer'
     param_path = app/'sce_sys/param.json'
+    # The published title identity and content version live in one file so the
+    # store catalog can read them from a release tag.
+    identity = json.loads((ROOT/'sce_sys/param.json').read_text())
+    if identity['titleId'] != TITLE:
+        raise RuntimeError('sce_sys/param.json titleId does not match '+TITLE)
     param = json.loads(param_path.read_text())
-    param['titleId'] = TITLE
-    param['conceptId'] = TITLE[4:]
-    param['contentId'] = 'UP9000-'+TITLE+'_00-'+'NUVIOPS5'.ljust(16, '0')
-    param['localizedParameters']['en-US']['titleName'] = 'Nuvio'
+    param['titleId'] = identity['titleId']
+    param['conceptId'] = identity['conceptId']
+    param['contentId'] = identity['contentId']
+    param['contentVersion'] = identity['contentVersion']
+    param['localizedParameters']['en-US']['titleName'] = identity['localizedParameters']['en-US']['titleName']
     param_path.write_text(json.dumps(param, indent=2)+'\n')
     # Separate settings from an installed EVO. All persistent writes stay /data.
     for p in app.rglob('*'):
