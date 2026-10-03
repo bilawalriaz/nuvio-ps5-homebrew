@@ -158,26 +158,21 @@ def adapt(evo):
 
 
 def patch_index(html):
-    """Add the PS5 input bridge, a black first paint and a non-blocking CSS load.
+    """Add the PS5 input bridge and a black first paint to Nuvio's index page.
 
     The PS5 browser paints its own document background before the Nuvio CSS
     applies. The white default flashes the whole screen when the browser
-    reopens after playback. The inline style makes the first paint black, and
-    the stylesheet loads with `media="print"` switched to `all` on load, so a
-    540 KB render-blocking request cannot hold the first paint back through the
-    console proxy.
+    reopens after playback, so the served page must be black from the first
+    byte of <head>.
+
+    The stylesheet stays a plain render-blocking <link>. A `media="print"`
+    link switched to `all` on load paints earlier, but the console's browser
+    then renders Nuvio unstyled, so the pattern is not usable here.
     """
     if html.count('<head>') != 1 or html.count('</head>') != 1:
         raise RuntimeError('Pinned UI index head anchors changed')
     if 'ps5-input.js' in html:
         raise RuntimeError('UI index already carries the PS5 bridge')
-    blocking = '<link rel="stylesheet" href="css/bundle.css" />'
-    if html.count(blocking) != 1:
-        raise RuntimeError('Pinned UI stylesheet anchor changed')
-    html = html.replace(blocking,
-                        '<link rel="stylesheet" href="css/bundle.css" media="print" '
-                        "onload=\"this.media='all'\">\n"
-                        '    <noscript><link rel="stylesheet" href="css/bundle.css"></noscript>')
     html = html.replace('<head>',
                         '<head>\n    <style>html,body{background-color:#000;margin:0}</style>')
     return html.replace('</head>', '<script src="ps5-input.js"></script></head>')
