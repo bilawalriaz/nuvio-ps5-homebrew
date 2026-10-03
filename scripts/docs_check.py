@@ -9,7 +9,7 @@ import sys
 from urllib.parse import unquote,urlsplit
 
 ROOT=Path(__file__).resolve().parents[1]
-PAGES={'ARCHITECTURE','BUILD','CONTRIBUTING','GLOSSARY','OPERATIONS','RELEASE','SOURCES','TROUBLESHOOTING','UPDATING','VALIDATION','WRITING'}
+PAGES={'ARCHITECTURE','BUILD','CONTRIBUTING','GLOSSARY','OPERATIONS','RELEASE','SOURCES','TROUBLESHOOTING','VALIDATION','WRITING'}
 
 def prose(text):
     return re.sub(r'(?ms)^```[^\n]*\n.*?^```[^\n]*$', '', text)

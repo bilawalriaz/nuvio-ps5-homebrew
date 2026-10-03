@@ -133,7 +133,5 @@ make upstream
 ```
 
 `scripts/update_upstreams.py` reports which `deps.lock` pins are behind their
-upstream release. It never writes `deps.lock` without `--apply`, which downloads
-and hashes each changed archive first. [Updating](UPDATING.md) is the full
-procedure, including the console steps and the verification that a launch
-actually ran.
+upstream release. `--apply` re-pins a changed input only after it downloads and
+hashes the new archive, and the builder verifies those hashes as usual.
