@@ -128,6 +128,7 @@ static pthread_mutex_t prospero_seek_mutex=PTHREAD_MUTEX_INITIALIZER;
 static int now_ms(void) {return 1;}
 """+fixed+r"""
 int main(void) {
+ (void)controls_last_used_ms;
  assert(current_media_path[0]==0);
  assert(prospero_request_inplace_seek(30,0)==1);
  assert(prospero_seek_pending==1 && prospero_seek_target_seconds==30 && player_paused);
