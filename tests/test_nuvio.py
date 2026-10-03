@@ -206,11 +206,24 @@ class UIIndexTests(unittest.TestCase):
         self.assertEqual(html.count('ps5-input.js'),1)
         self.assertLess(html.index('ps5-input.js'),html.index('</head>'))
 
+    def test_ps5_index_loads_the_stylesheet_without_blocking_the_first_paint(self):
+        source=('<html>\n  <head>\n'
+                '    <link rel="stylesheet" href="css/bundle.css" />\n  </head>\n'
+                '  <body></body>\n</html>\n')
+        html=build.patch_index(source)
+        self.assertIn('media="print"',html)
+        self.assertIn("this.media='all'",html)
+        self.assertIn('<noscript><link rel="stylesheet" href="css/bundle.css"></noscript>',html)
+        # The blocking form must be gone, or the first paint still waits.
+        self.assertNotIn('href="css/bundle.css" />',html)
+
     def test_ps5_index_refuses_moved_or_repeated_anchors(self):
         with self.assertRaises(RuntimeError):
             build.patch_index('<html><body>no head</body></html>')
         with self.assertRaises(RuntimeError):
             build.patch_index('<head></head><script src="ps5-input.js"></script>')
+        with self.assertRaises(RuntimeError):
+            build.patch_index('<head><link rel="stylesheet" href="css/other.css" /></head>')
 
 
 class PlayerBackTests(unittest.TestCase):

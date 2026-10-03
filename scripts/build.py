@@ -158,17 +158,26 @@ def adapt(evo):
 
 
 def patch_index(html):
-    """Add the PS5 input bridge and a black first paint to Nuvio's index page.
+    """Add the PS5 input bridge, a black first paint and a non-blocking CSS load.
 
     The PS5 browser paints its own document background before the Nuvio CSS
     applies. The white default flashes the whole screen when the browser
-    reopens after playback, so the served page must be black from the first
-    byte of <head>.
+    reopens after playback. The inline style makes the first paint black, and
+    the stylesheet loads with `media="print"` switched to `all` on load, so a
+    540 KB render-blocking request cannot hold the first paint back through the
+    console proxy.
     """
     if html.count('<head>') != 1 or html.count('</head>') != 1:
         raise RuntimeError('Pinned UI index head anchors changed')
     if 'ps5-input.js' in html:
         raise RuntimeError('UI index already carries the PS5 bridge')
+    blocking = '<link rel="stylesheet" href="css/bundle.css" />'
+    if html.count(blocking) != 1:
+        raise RuntimeError('Pinned UI stylesheet anchor changed')
+    html = html.replace(blocking,
+                        '<link rel="stylesheet" href="css/bundle.css" media="print" '
+                        "onload=\"this.media='all'\">\n"
+                        '    <noscript><link rel="stylesheet" href="css/bundle.css"></noscript>')
     html = html.replace('<head>',
                         '<head>\n    <style>html,body{background-color:#000;margin:0}</style>')
     return html.replace('</head>', '<script src="ps5-input.js"></script></head>')
@@ -251,6 +260,13 @@ def main():
                PS5_LLD=shutil.which('ld.lld') or '',
                NUVIO_MAC_SDK=subprocess.check_output(['xcrun', '--show-sdk-path'], text=True).strip())
     env['PATH'] = ':'.join([core+'/libexec/gnubin', llvm+'/bin', str(sdk/'bin'), env['PATH']])
+    # The app link expands "${PS5_SYSROOT}/lib"/*.so and relies on libkernel.so
+    # coming before libkernel_web.so: with --as-needed the first stub that
+    # satisfies a symbol is the one recorded in DT_NEEDED, and the module
+    # imports exactly that library. A UTF-8 collation puts libkernel.so last,
+    # so the title imported libkernel_web.prx and never started on the console.
+    # C collation restores libkernel.prx. Do not remove this.
+    env['LC_ALL'] = 'C'
     run(['bash', evo/'scripts/package-app.sh'], cwd=evo, env=env)
     # Reuse the reviewed, fixed-purpose controls with Nuvio's own identity.
     control = (ROOT/'vendor/control.c').read_text().replace('AURORA', 'NUVIO').replace('Aurora', 'Nuvio').replace('aurora', 'nuvio').replace('PPSA99998', TITLE)

@@ -181,23 +181,18 @@ entry or thumbnail during this session. The cause was the console's DNS
 connectivity, not this change. The app recovered when connectivity did.
 
 [LOCALLY BUILT] The owner reported a white flash between the native splash screen
-and the Nuvio interface when a stream exits, visible in a dark room. The served
-`index.html` now carries
-`<style>html,body{background-color:#000;margin:0}</style>` as the first element
-of `<head>`, applied through `patch_index()` and covered by two host tests. A
-browser probe then sampled every animation frame of a fresh load: the document
-background was `rgb(13,13,13)` from the first frame and no frame was white. The
-page does not paint white, so the remaining flash comes from the browser dialog
-itself. EVO closes the dialog for playback
-(`sceWebBrowserDialogClose()`) and opens a new one on return, and the new
-dialog's own surface shows before the page renders. Owner confirmation of the
-change is pending.
+and the Nuvio interface when a stream exits, visible in a dark room. Two changes
+went in. The served `index.html` carries
+`<style>html,body{background-color:#000;margin:0}</style>` as its first head
+element, and the 540 KB `css/bundle.css` now loads with `media="print"` switched
+to `all` on load, so it cannot hold the first paint back through the console
+proxy. `patch_index()` applies both, covered by three host tests.
 
-[TESTED-ON-CONSOLE] The 2026-10-03 rebuild also linked the wrong kernel stub
-under a UTF-8 collation (`libkernel_web.prx`, see [Build](BUILD.md)). The builder
-now pins `LC_ALL=C` and the rebuilt module imports `libkernel.prx`, matching the
-installed build, but the title still failed to start. The cause of that failure
-is not established.
+A browser probe sampled every animation frame and the paint timings: the
+document background is `rgb(0,0,0)` from the first frame, `first-paint` lands at
+40 ms, the stylesheet still applies (`--bg-color: #0d0d0d`) and no frame is
+white. The page is therefore not the source of any white flash. Owner
+confirmation of the stream-exit transition is pending.
 
 [TESTED-ON-CONSOLE] The title icon was replaced with the repository artwork in
 `assets/icon.png` (512x512). The console copy verified byte-for-byte at
