@@ -1,5 +1,7 @@
 # Nuvio PS5
 
+<img src="assets/logo.png" width="190" alt="Nuvio">
+
 Nuvio PS5 runs Nuvio TV on a jailbroken PlayStation 5 and plays streams with EVO
 Player's native engine. Nuvio supplies the account, catalogue and addon screens.
 EVO supplies the controller input, audio and hardware video decoding.

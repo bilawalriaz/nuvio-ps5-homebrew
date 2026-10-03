@@ -60,7 +60,7 @@ void EvoRmlApp::RenderNuvio(uint32_t* framebuffer, int width, int height, const 
     asset=Path(__file__).resolve().parent.parent/'assets'
     shutil.copyfile(asset/'nuvio.rml',app/'assets/rml/nuvio.rml')
     shutil.copyfile(nuvio/'assets/brand/app_logo_wordmark.png',app/'assets/icons/nuvio-wordmark.png')
-    # Fixed-size artwork rendered from the pinned official Nuvio branding.
+    # Fixed-size repository artwork: the title icon and the launch screens.
     shutil.copyfile(asset/'icon.png',app/'sce_sys/icon0.png')
     for name in ('pic0.png','pic1.png'):
         shutil.copyfile(asset/'launch.png',app/'sce_sys'/name)
