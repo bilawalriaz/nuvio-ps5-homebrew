@@ -135,3 +135,13 @@ make upstream
 `scripts/update_upstreams.py` reports which `deps.lock` pins are behind their
 upstream release. `--apply` re-pins a changed input only after it downloads and
 hashes the new archive, and the builder verifies those hashes as usual.
+
+## The build pins its locale
+
+`scripts/build.py` runs the packaging step with `LC_ALL=C`. Do not remove it. The
+app link expands `${PS5_SYSROOT}/lib` with a shell glob, and with `--as-needed`
+the first stub that satisfies a kernel symbol is the one recorded in the module's
+import table. Under a UTF-8 collation `libkernel.so` sorts after
+`libkernel_web.so`, so the title imports `libkernel_web.prx` instead of
+`libkernel.prx`. Builds from 2026-10-03 did that and the console refused to start
+them. The same source built under C collation imports `libkernel.prx`.
