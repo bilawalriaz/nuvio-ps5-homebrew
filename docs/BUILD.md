@@ -83,14 +83,16 @@ artifacts. It does not certify console execution. The builder leaves
 | `build/control-2.elf` | Title information helper |
 | `build/control-3.elf` | Launch helper |
 | `build/control-4.elf` | Staged runtime hash helper |
-| `build/permission-watcher.elf` | Resident Nuvio permission helper |
+| `build/nuvio.elf` | Single boot payload: privileges and the console UI server |
 | `build/promote.elf` | One-time Nuvio permission helper |
 | `build/build.json` | Native file, helper and input hashes |
 | `.cache/` | Checked input archives |
 
-The title includes the generated `sce_module/libc.prx` runtime. Keep the ELF
-section headers intact and do not strip the helper ELFs. The loader reads the
-section headers to size each transfer.
+The title includes the generated `sce_module/libc.prx` runtime and the whole
+browser UI under `webui/`. `nuvio.elf` serves that folder from the console, so it
+needs no network host. Keep the ELF section headers intact and do not strip the
+payload or helper ELFs. The loader reads the section headers to size each
+transfer.
 
 ## Build only the UI
 
@@ -99,8 +101,9 @@ make ui
 ```
 
 This writes `build/ui` without touching the native title or the native receipt.
-Keep the native receipt for the installed title. UI changes still need browser
-checks on the console.
+Keep the native receipt for the installed title. A full `make build` copies
+`build/ui` into the title as `webui/`. A UI-only build does not, so serve it with
+`scripts/serve.py` while you iterate or copy it into an installed title.
 
 ## Change generated directories
 

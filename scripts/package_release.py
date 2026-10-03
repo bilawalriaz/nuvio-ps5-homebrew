@@ -15,8 +15,8 @@ from elfcheck import validate
 
 # Short descriptions for the PS5 Payload Manager source file.
 HELPER_INFO = {
-    'permission-watcher.elf': ('Nuvio permission watcher',
-        'Resident helper that grants the Nuvio title its network privileges. Run once per boot.'),
+    'nuvio.elf': ('Nuvio',
+        'Single boot payload: grants the Nuvio title its network privilege and serves the browser UI from the console. Run once per boot.'),
     'promote.elf': ('Nuvio permission promote',
         'One-time helper that grants the Nuvio title its network privileges.'),
     'control-1.elf': ('Nuvio register title',
@@ -29,9 +29,13 @@ HELPER_INFO = {
         'Hashes the staged libc.prx runtime on the console.'),
 }
 
+# Only one payload is advertised. The control and promote helpers are build and
+# recovery tools; they ship inside the complete archive, not as release assets.
+PUBLIC_HELPERS = ['nuvio.elf']
+
 
 def helper_inventory(receipt):
-    expected = {f'control-{i}.elf' for i in (1, 2, 3, 4)} | {'promote.elf', 'permission-watcher.elf'}
+    expected = {f'control-{i}.elf' for i in (1, 2, 3, 4)} | {'promote.elf', 'nuvio.elf'}
     if set(receipt['helpers']) != expected:
         raise RuntimeError('Unexpected helper inventory')
     for name in sorted(expected):
@@ -139,11 +143,14 @@ def main():
     helper_dir = out / 'helpers'
     helper_dir.mkdir(exist_ok=True)
     for name in helpers:
-        target = helper_dir / name
-        target.write_bytes((WORK / name).read_bytes())
-        assets.append(target)
+        (helper_dir / name).write_bytes((WORK / name).read_bytes())
+    # One advertised payload at the release root. The store's Payload Manager
+    # source should not ask a user to choose between six helpers.
+    payload_asset = out / 'nuvio.elf'
+    payload_asset.write_bytes((WORK / 'nuvio.elf').read_bytes())
+    assets.append(payload_asset)
     payloads = out / 'payloads.json'
-    write_payloads_json(version, tag, args.repo, helpers, payloads)
+    write_payloads_json(version, tag, args.repo, PUBLIC_HELPERS, payloads)
     assets.append(payloads)
     (out / 'SHA256SUMS').write_text(''.join(digest(p) + '  ' + p.name + '\n' for p in assets))
     print('Store artifact:', store, digest(store))

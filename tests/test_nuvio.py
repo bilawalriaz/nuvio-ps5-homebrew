@@ -255,3 +255,73 @@ int main(){
             p=Path(tmp)/'back.cpp';p.write_text(source);binary=Path(tmp)/'back'
             subprocess.run([compiler,'-std=c++17','-Wall','-Wextra','-Werror',str(p),'-o',str(binary)],check=True,timeout=20)
             subprocess.run([str(binary)],check=True,timeout=10)
+
+
+class UIServerTests(unittest.TestCase):
+    """Exercise the console UI server's path, MIME and HTTP behavior on the host."""
+
+    def test_path_confinement_mime_and_http_serve(self):
+        import shutil
+        import subprocess
+        import time
+        compiler=shutil.which('clang') or shutil.which('cc')
+        if not compiler:
+            self.skipTest('No host C compiler')
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)/'webui'
+            (root/'css').mkdir(parents=True)
+            (root/'index.html').write_bytes(b'<html>NUVIO</html>')
+            (root/'css'/'bundle.css').write_bytes(b'body{color:#000}')
+            harness=Path(tmp)/'harness.c'
+            harness.write_text('#include "'+str(APP/'ui_server.c')+'"\n'+r'''
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
+int main(int argc, char **argv) {
+    char out[4096];
+    assert(nuvio_ui_path("/root","/",out,sizeof out)==0 && !strcmp(out,"/root/index.html"));
+    assert(nuvio_ui_path("/root","/css/bundle.css",out,sizeof out)==0 && !strcmp(out,"/root/css/bundle.css"));
+    assert(nuvio_ui_path("/root","/index.html?v=1",out,sizeof out)==0 && !strcmp(out,"/root/index.html"));
+    assert(nuvio_ui_path("/root","/sub/",out,sizeof out)==0 && !strcmp(out,"/root/sub/index.html"));
+    assert(nuvio_ui_path("/root","/a/./b",out,sizeof out)==0 && !strcmp(out,"/root/a/b"));
+    assert(nuvio_ui_path("/root","/%2e%2e/secret",out,sizeof out)!=0);
+    assert(nuvio_ui_path("/root","/a/../../secret",out,sizeof out)!=0);
+    assert(nuvio_ui_path("/root","/a%00b",out,sizeof out)!=0);
+    assert(strstr(nuvio_ui_mime("css/bundle.css"),"text/css")!=NULL);
+    assert(strstr(nuvio_ui_mime("app.bundle.js"),"javascript")!=NULL);
+    assert(!strcmp(nuvio_ui_mime("x.bin"),"application/octet-stream"));
+    if (argc > 2) {
+        if (nuvio_ui_server_open(argv[1], atoi(argv[2])) != 0) return 1;
+        for (;;) nuvio_ui_server_poll(250);
+    }
+    return 0;
+}
+''')
+            binary=Path(tmp)/'harness'
+            subprocess.run([compiler,'-std=c11','-Wall','-Wextra','-Werror','-pthread',str(harness),'-o',str(binary)],check=True,timeout=20)
+            subprocess.run([str(binary)],check=True,timeout=10)
+            server=subprocess.Popen([str(binary),str(root),'45917'])
+            try:
+                base='http://127.0.0.1:45917'
+                for _ in range(60):
+                    try:
+                        with urllib.request.urlopen(base+'/css/bundle.css',timeout=0.5) as response:
+                            self.assertEqual(response.read(),b'body{color:#000}')
+                            self.assertEqual(response.headers['Content-Type'],'text/css; charset=utf-8')
+                            break
+                    except OSError:
+                        time.sleep(0.1)
+                else:
+                    self.fail('server did not answer')
+                with urllib.request.urlopen(base+'/',timeout=1) as response:
+                    self.assertEqual(response.read(),b'<html>NUVIO</html>')
+                with self.assertRaises(urllib.error.HTTPError) as exc:
+                    urllib.request.urlopen(base+'/%2e%2e/secret',timeout=1)
+                self.assertEqual(exc.exception.code,403)
+                with self.assertRaises(urllib.error.HTTPError) as exc:
+                    urllib.request.urlopen(base+'/missing.js',timeout=1)
+                self.assertEqual(exc.exception.code,404)
+            finally:
+                server.terminate()
+                server.wait(timeout=5)
+

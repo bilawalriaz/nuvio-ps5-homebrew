@@ -76,6 +76,6 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" "${args[@]}" \
             release/PPSA99997.zip \
             release/nuvio-ps5-*.zip \
-            release/helpers/*.elf \
+            release/nuvio.elf \
             release/payloads.json \
             release/SHA256SUMS

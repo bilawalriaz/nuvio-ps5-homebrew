@@ -12,7 +12,7 @@
 | Folder title | A native homebrew app stored as a directory below `/data/homebrew`. |
 | Handoff | The transition between Nuvio in the browser and the native playback engine. |
 | Helper | A fixed-purpose ELF payload that supports installation, launch or permission. |
-| Host | The computer that builds the port and serves the UI. |
+| Host | The computer that builds the port. It no longer serves the UI. |
 | Installed receipt | A preserved receipt for files that reached the console. |
 | Loopback | A network address that refers to the same machine, here the console. |
 | Native player | EVO's playback code that runs as the PS5 title. |

@@ -13,6 +13,11 @@ import urllib.parse
 
 from build import ROOT, WORK, TITLE
 
+# The UI is served from the console by nuvio.elf, so a first install needs no
+# LAN origin. The loopback origin matches the port the payload binds and the
+# value it writes into nuvio.conf when the file is absent.
+DEFAULT_ORIGIN = 'http://127.0.0.1:4173'
+
 
 def helper(action, host, helper_dir=WORK):
     result = subprocess.run(['python3', str(ROOT/'scripts/upload.py'), '--file',
@@ -40,7 +45,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--host', default=os.environ.get('PS5_HOST'))
     ap.add_argument('--ftp-port', type=int, default=int(os.environ.get('PS5_FTP_PORT', '0')))
-    ap.add_argument('--origin', required=True, help='Nuvio UI HTTP origin reachable from PS5')
+    ap.add_argument('--origin', default=DEFAULT_ORIGIN,
+                    help='UI origin stored in nuvio.conf (default: the on-console server)')
     ap.add_argument('--launch', action='store_true')
     ap.add_argument('--from-release', type=Path, metavar='DIR',
                     help='Install from an unpacked release archive instead of a source build')

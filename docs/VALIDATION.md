@@ -60,6 +60,8 @@ below omits both, and it keeps unknown resident versions as unknown.
 | Corrected exit eboot | `4989d4cabd1f37ade588b2eff66bbb0f1459977ff13aed9e66f93ace4ecd67a8` | Decoder stop and browser reopening in the log |
 | Generated runtime | `e6ff45d16adf687855cc3b33b0c8a4132b6504360b221e0a34c7e99fb3ba0036` | Hash checked on the console. Unchanged through these updates |
 | Resident watcher | `8cf4bbe0b889b9063a5775b541027f87a2f5599889e655999a0530eaaec83d89` | Ready message, and a later title launch without manual promotion |
+| Console UI payload `nuvio.elf` | `b0b41a6f8d8882c2f9d0a61199bbdddfadcd41ea1691f1d2fe8a9740d4702e3d` | Served the whole browser UI from the console with no LAN host |
+| Console UI payload `nuvio.elf` with settle | `67bc0d9986bb0abb9b6c719c217fab01470af4f53300cb3fac2cee8c6eb50f44` | Title bound its proxy and loaded the interface from the console |
 
 The rebuilt watcher adds SIGPIPE handling, so it differs from the resident
 watcher. It did not replace the resident watcher in this session. Each new upload
@@ -200,6 +202,76 @@ registration reported `changed:false` and left the icon URL stamp at
 `v=1790864733-28006`, so the home-screen tile keeps the old artwork until the
 title record is recreated.
 
+## Console serves its own UI, 2026-10-03
+
+[TESTED-ON-CONSOLE] The browser UI now travels inside the title folder and the
+boot payload serves it, so no computer runs while you use the app.
+
+- Artifact: `nuvio.elf`
+  `b0b41a6f8d8882c2f9d0a61199bbdddfadcd41ea1691f1d2fe8a9740d4702e3d`.
+- Folder: the build's `webui/` (117 files, 17 MB) copied into
+  `/data/homebrew/PPSA99997/` and verified byte-for-byte over FTP.
+- Configuration: `/data/nuvio/nuvio.conf` with `host=127.0.0.1`, `port=4173`,
+  `https=0`.
+- Command: push `nuvio.elf` to loader 9021, then launch `PPSA99997`.
+- Expected: the title opens its own interface and no LAN host answers.
+- Observed: with the host UI server stopped, the payload printed
+  `NUVIO ui: serving /data/homebrew/PPSA99997/webui on 127.0.0.1:4173` and the
+  console fetched 68 UI requests (`/`, `/index.html`, `/css/bundle.css`,
+  `/app.bundle.js`, `/res/i18n/en.json`, `/assets/libs/hls.min.js`). The native log
+  records `proxy: injected hook into / (2568 bytes)` and `page: route authQrSignIn`.
+- Recovery: the console keeps the previous origin at
+  `/data/nuvio/nuvio.conf.before-console-ui`.
+
+[TESTED-ON-CONSOLE] The session measured two approaches and rejected one. A
+payload listener bound to the console's own LAN address is reachable from another
+machine, but the title's proxy did not load the page from that address
+(`page watchdog: ... did not load`), so the working origin is loopback. A threaded
+accept loop inside the payload bound the port and then stopped answering. The
+payload now drives one single-threaded accept loop from its own thread of control.
+
+Owner confirmation of the visible transition is still pending. The session found
+the credential timing that blocked the launch later the same day, in
+[Console UI working end to end](#console-ui-working-end-to-end-2026-10-03).
+
+## Console UI working end to end, 2026-10-03
+
+[TESTED-ON-CONSOLE] After a fresh install of the title from this build, the app
+launched, bound its proxy and loaded the interface from the console with no
+computer running.
+
+- Install: all 223 files of `output/app/PPSA99997/` written to
+  `/data/homebrew/PPSA99997` (68,133,019 bytes). The installed tree matches
+  `build.json` exactly.
+- Module: `eboot.bin` 38,847,060 B sha256 `f7ea5526…` and `sce_module/libc.prx`
+  1,284,674 B sha256 `e6ff45d1…`, both read on the console with a payload.
+- Payload: `nuvio.elf` sha256 `67bc0d99…`.
+- Observed: `web: server: 127.0.0.1:8686 ready, proxying http://127.0.0.1:4173`,
+  `web: proxy: injected hook into / (2568 bytes)`, `web: storage: restored 717849
+  bytes`, `web: page: route home`, and 104 requests in `/data/nuvio/ui.log`.
+
+[TESTED-ON-CONSOLE] Two faults had to be fixed first.
+
+The payload scans for the title process and grants it the credentials its
+loopback bind needs. Writing those credentials while the title's PRX modules
+still resolve faults the process. The session measured three timings on one boot:
+
+| Credential write | Result |
+|---|---|
+| immediately on detection (~0.25 s) | `PRX_PROCESS_STARTUP_FAILURE` or `PRX_NOT_RESOLVED_FUNCTION` |
+| delayed 2500 ms | app runs, `bind/listen 127.0.0.1:8686 failed errno=13`, `WV-109145-0` |
+| delayed 500 ms | app runs and binds, interface loads |
+
+The payload now waits 500 ms (`NUVIO_PROMOTE_DELAY_MS`). The scan also stopped
+calling `sceKernelGetAppInfo` for every process each cycle, a call kstuff patches
+(`[kstuff.elf] … sceKernelGetAppInfo: Broken pipe`). This timing is the likely
+explanation for the older "a launch can take several attempts" note.
+
+[TESTED-ON-CONSOLE] A raw-ELF `eboot.bin` cannot start. The system rejects it
+before the app runs: `sceSblAuthMgrAuthHeader returned unexpected error 46` and
+`sceSblACMgrGetFsSandboxType(.../eboot.bin) failed. 0x80020008`. Deploy the
+converted `output/app/PPSA99997/eboot.bin`, never the `.build/eboot.elf`.
+
 ## Host coverage
 
 [LOCALLY BUILT] Eight host regressions pass. They cover the HTTP handler, browser
@@ -214,7 +286,7 @@ Use a receipt for the exact installed artifact. Keep a filtered private log and 
 record of the visible behavior.
 
 1. Start from a fresh jailbreak when you test boot behavior.
-2. Push exactly one watcher for that boot.
+2. Push exactly one payload, `nuvio.elf`, for that boot.
 3. Launch the title.
 4. Check Nuvio branding during startup.
 5. Check guest access and focused X activation.
@@ -232,7 +304,8 @@ record of the visible behavior.
 17. Record the subtitles, formats and session durations you tested.
 
 Generated test picture and audio, pause, subtitles and longer stability are still
-open. Fresh-boot behavior with the rebuilt watcher is also open.
+open. Fresh-boot behavior with the console UI payload is also open, and the owner
+has still to confirm the visible playback-return transition.
 
 ## Record a new result
 

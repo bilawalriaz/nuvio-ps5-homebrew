@@ -55,7 +55,7 @@ Points to cover:
 - How the app recreates the browser around native playback.
 - The rejected provider seek and what it did to the playback state machine.
 - The loopback bind permission that file access did not grant.
-- One tested firmware, macOS builds and the LAN UI server the app needs.
+- One tested firmware, macOS builds and a self-contained console UI server.
 - The open limits and the help you want.
 
 Do not ask for votes or coordinate comments.
@@ -80,9 +80,10 @@ confirm a release, and never upload private files to a scanning service.
 > decoder stop and browser reopening.
 >
 > This is an alpha. It needs a jailbreak each boot, a loader, FTP and
-> ShadowMount, and a computer that serves the UI while you use it. Native builds
-> need macOS. The permission helper accepts firmware 13.60 only. Pause,
-> subtitles, fresh-boot behavior and long sessions still need testing.
+> ShadowMount, and one payload pushed per boot. The console serves its own UI, so
+> no computer has to stay on. Native builds need macOS. The payload accepts
+> firmware 13.60 only. Pause, subtitles, fresh-boot behavior and long sessions
+> still need testing.
 >
 > Downloads and build instructions:
 > https://github.com/bilawalriaz/nuvio-ps5-homebrew

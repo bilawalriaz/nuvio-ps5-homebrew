@@ -282,7 +282,7 @@
  #define EVO_THEME_DIR evo_data_path("themes")
 --- a/projects/evoplayer/sce_sys/param.json
 +++ b/projects/evoplayer/sce_sys/param.json
-@@ -7,9 +7,9 @@
+@@ -7,10 +7,10 @@
    "attribute": 1644167168,
    "attribute2": 0,
    "attribute3": 524352,
@@ -290,10 +290,12 @@
 +  "conceptId": "99997",
    "contentBadgeType": 1,
 -  "contentId": "UP9000-PPSA99039_00-EVOPLAYER0000000",
+-  "contentVersion": "01.000.001",
 +  "contentId": "UP9000-PPSA99997_00-NUVIOPS500000000",
-   "contentVersion": "01.000.001",
++  "contentVersion": "01.000.002",
    "downloadDataSize": 256,
    "gameIntent": {
+     "permittedIntents": [
 @@ -22,7 +22,7 @@
    "localizedParameters": {
      "defaultLanguage": "en-US",
@@ -423,7 +425,15 @@
      s_entry_failed = 0;
      s_handoff_ready = 0;
      pthread_mutex_unlock(&s_mx);
-@@ -1547,3 +1550,10 @@
+@@ -1253,6 +1256,7 @@
+         s_param.header_y     = L->y;
+         LOG("layout %s", L->name);
+     }
++    s_param.animation = 0;
+     LOG("Open url=%s ...", url);
+     int rc = sceWebBrowserDialogOpen(&s_param);
+     LOG("sceWebBrowserDialogOpen -> 0x%08x", (unsigned)rc);
+@@ -1547,3 +1551,10 @@
  #else
  typedef int evo_webui_not_built; /* keep the TU non-empty */
  #endif /* EVO_APP_MODULE */

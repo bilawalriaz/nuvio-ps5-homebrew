@@ -44,15 +44,15 @@ make release
 
 | Artifact | Contents |
 |---|---|
-| `PPSA99997.zip` | The `<TITLEID>/` app folder. This is the store artifact. |
-| `nuvio-ps5-<version>.zip` | The complete package: app, UI, helpers, source, receipts. |
-| `helpers/*.elf` | The helper payloads on their own, for Payload Manager. |
-| `payloads.json` | A Payload Manager source listing the helpers with hashes. |
+| `PPSA99997.zip` | The `<TITLEID>/` app folder, including `webui/`. This is the store artifact. |
+| `nuvio-ps5-<version>.zip` | The complete package: app, `nuvio.elf`, helpers, UI source, receipts. |
+| `nuvio.elf` | The single boot payload for Payload Manager. |
+| `payloads.json` | A Payload Manager source listing `nuvio.elf` with its hash. |
 | `SHA256SUMS` | Hashes for the release assets. |
 
-`PPSA99997.zip` unpacks to a single `PPSA99997/` folder. Users copy that folder
-to `/data/homebrew/`. The complete package keeps the source and the UI for a
-scripted install.
+`PPSA99997.zip` unpacks to a single `PPSA99997/` folder. Users copy that folder to
+`/data/homebrew/` and push `nuvio.elf` once per boot. The complete package keeps
+the source, the browser UI and the build helpers for a scripted install.
 
 The package script checks the native file hashes and the helper ELF hashes. It
 accepts only the expected helper inventory. The receipt covers the native files

@@ -1,5 +1,6 @@
 """Native Nuvio shell around the existing browser/native playback lifetimes."""
 from pathlib import Path
+import os
 import shutil
 
 
@@ -12,6 +13,14 @@ def replace(path,old,new):
 def apply(evo,nuvio):
     app=evo/'projects/evoplayer'
     web=app/'src/evo_webui.c'
+    # WebBrowserDialogParam carries an undocumented `animation` field that
+    # upstream never sets. The 2026-10-03 investigation tries values here to
+    # find out whether it softens the dialog's white first frame; 0 is upstream.
+    animation=os.environ.get('NUVIO_WEBUI_ANIMATION','0')
+    if not animation.isdigit():
+        raise RuntimeError('NUVIO_WEBUI_ANIMATION must be a number')
+    replace(web,'    LOG("Open url=%s ...", url);',
+            '    s_param.animation = '+animation+';\n    LOG("Open url=%s ...", url);')
     replace(web,'static char s_hook_profile[16];','static int s_native_requested;\nstatic char s_hook_profile[16];')
     replace(web,'        s_close_req = 1;','        s_close_req = 1;\n        s_native_requested = 1;')
     replace(web,'    s_hook_seen = 0;', '    s_hook_seen = 0;\n    s_native_requested = 0;')

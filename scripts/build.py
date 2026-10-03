@@ -272,14 +272,27 @@ def main():
         run([sdk/'bin/prospero-clang', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
              '-DNUVIO_CONTROL_ACTION='+str(action), *inputs, '-lkernel_sys', '-lkernel_web',
              '-lSceUserService', '-lSceSystemService', '-o', WORK/('control-'+str(action)+'.elf')], env=env)
-    for name, flags in (('promote', []), ('permission-watcher', ['-DNUVIO_WATCH'])):
-        run([sdk/'bin/prospero-clang', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
-             *flags, ROOT/'scripts/promote.c', '-lkernel_sys', '-lkernel_web',
-             '-o', WORK/(name+'.elf')], env=env)
+    run([sdk/'bin/prospero-clang', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+         ROOT/'scripts/promote.c', '-lkernel_sys', '-lkernel_web',
+         '-o', WORK/'promote.elf'], env=env)
+    # One boot payload: it grants the title its network privilege and serves the
+    # browser UI from the installed title folder (scripts/ui_server.c). That is
+    # why no computer has to run an HTTP server on the same network.
+    run([sdk/'bin/prospero-clang', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+         '-DNUVIO_WATCH', ROOT/'scripts/promote.c', ROOT/'scripts/ui_server.c',
+         '-lkernel_sys', '-lkernel_web', '-o', WORK/'nuvio.elf'], env=env)
     dist = evo/'output/app'/TITLE
     (dist/'portable.txt').touch()
+    # The UI travels inside the title folder, so one archive installs a working
+    # app and the payload serves it over loopback with no LAN origin.
+    shutil.rmtree(dist/'webui', ignore_errors=True)
+    shutil.copytree(WORK/'ui', dist/'webui')
     receipt = {'title_id': TITLE, 'firmware_validation': '[UNKNOWN]',
-               'helpers': {p.name: digest(p) for p in WORK.glob('*.elf')},
+               # Explicit names, not a glob: a stale helper from an earlier
+               # build in the same work directory must not enter the receipt.
+               'helpers': {name: digest(WORK/name) for name in (
+                   'control-1.elf', 'control-2.elf', 'control-3.elf', 'control-4.elf',
+                   'promote.elf', 'nuvio.elf')},
                'source_pins': {k: fetch(k)[0]['sha256'] for k in ('nuvio-tv-source','evo-player-nuvio-source','nuvio-pacbrew','ps5-payload-sdk-prebuilt','nuvio-official-tv-config')},
                'files': {str(p.relative_to(dist)): digest(p) for p in dist.rglob('*') if p.is_file()}}
     (WORK/'build.json').write_text(json.dumps(receipt, indent=2)+'\n')

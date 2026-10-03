@@ -14,15 +14,15 @@ parameters.
 ## Browser error WV-109145-0
 
 In the first test this error followed a proxy bind failure. The host preflight
-answered, but the loopback listener returned `errno=13`. The permission helper
-resolves that failure. The error code on its own does not identify a DNS or TLS
-problem.
+answered, but the loopback listener returned `errno=13`. The payload privilege
+grant resolves that failure. The error code on its own does not identify a DNS or
+TLS problem.
 
-1. Check that the host UI server runs.
-2. Check the UI origin in `/data/nuvio/nuvio.conf`.
+1. Check that `nuvio.elf` runs for this boot and prints the `serving` line.
+2. Check the UI origin in `/data/nuvio/nuvio.conf` (default `127.0.0.1`).
 3. Check for a listener failure in a private native log.
-4. Check that one permission watcher runs for this boot.
-5. Push a watcher after a fresh jailbreak and wait for the ready message.
+4. Check that the title folder carries `webui/`.
+5. Push the payload after a fresh jailbreak and wait for the ready message.
 
 Use the [startup procedure](OPERATIONS.md#start-after-a-reboot) after a reboot.
 
@@ -84,8 +84,8 @@ capturing after an idle timeout or an output limit. A resident helper can keep
 running after capture ends, and a failed payload can also produce no output.
 
 Check the expected response for that helper. Treat the transfer itself as
-transport, not execution. Do not push resident watchers again to compensate for
-missing output. If the console rebooted, run the fresh-boot procedure.
+transport, not execution. Do not push the payload again to compensate for missing
+output. If the console rebooted, run the fresh-boot procedure.
 
 ## The updater refuses the title
 

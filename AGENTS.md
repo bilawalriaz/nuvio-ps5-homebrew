@@ -16,6 +16,7 @@ Do not scan for a console.
 Do not invent offsets or platform symbols.
 Read the actual SDK declarations and examples before using APIs.
 Do not strip payload ELFs.
+Keep the browser UI served from the console. Never require a network host for it.
 
 Never commit owner configuration, addon URLs, credentials, logs or generated binaries.
 Never commit Sony modules or console dumps.

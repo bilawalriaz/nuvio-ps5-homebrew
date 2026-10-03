@@ -33,7 +33,10 @@ def main():
             raise RuntimeError('Local receipt mismatch')
         if want!=old['files'].get(name): changed.append(name)
     allowed={'eboot.bin','sce_sys/icon0.png','sce_sys/pic0.png','sce_sys/pic1.png','assets/rml/nuvio.rml','assets/icons/nuvio-wordmark.png'}
-    if any(n not in allowed for n in changed): raise RuntimeError('Changes exceed reviewed native/UI asset allowlist')
+    # The browser UI now ships inside the title folder and is served from the
+    # console by the boot payload, so a UI update replaces webui/ as one unit.
+    if any(n not in allowed and not n.startswith('webui/') for n in changed):
+        raise RuntimeError('Changes exceed reviewed native/UI asset allowlist')
     info_text=helper(2,args.host)
     lines=[l for l in info_text.splitlines() if l.startswith('{')]
     info=json.loads(lines[-1]) if lines else {}

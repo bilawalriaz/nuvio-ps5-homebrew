@@ -3,19 +3,21 @@
 ## Component boundaries
 
 [SOURCE-VERIFIED] The port uses the source revisions in [Sources](SOURCES.md).
-The computer serves the Nuvio UI. The console runs an EVO-derived native title
-with the identity `PPSA99997`.
+The console runs an EVO-derived native title with the identity `PPSA99997`. The
+browser UI travels inside the title folder, and the boot payload serves it over
+the console's loopback, so the app runs without a computer.
 
 ```mermaid
 flowchart LR
-    Host[Computer: Nuvio HTTP server] --> Proxy[PS5: EVO loopback proxy]
+    Files[PS5: webui/ in the title folder] --> Server[PS5: nuvio.elf static server]
+    Server --> Proxy[PS5: EVO loopback proxy]
     Proxy --> Browser[PS5 system browser: Nuvio UI]
     Browser --> Bridge[Stream and controller bridge]
     Bridge --> Player[Native EVO playback engine]
     Player --> Decoder[sceVideodec2 hardware decoder]
     Player --> Audio[Native audio output]
     Player --> Return[Stop and reopen browser]
-    Return --> Browser
+    Return --> Proxy
 ```
 
 The browser and the native player have separate lifetimes. The title closes the
@@ -39,6 +41,7 @@ port never runs a browser inside the native decoder.
 | Playback overlays | Keep active playback screens visible | Preserve native controls and dialogs |
 | Route state | Enable the Nuvio resume methods for the PS5 flag | Keep browsing state across browser recreation |
 | Public login configuration | Read selected values from the official TV package | Enable the official QR login path |
+| Browser UI hosting | Serve `webui/` from the console payload over loopback | Remove the computer that served the UI |
 | Host build | Adapt the EVO packaging for macOS | Build without a Linux VM |
 
 `sce_sys/param.json` in this repository holds the title identity and content
@@ -85,14 +88,14 @@ time. A successful seek on one stream does not show performance for another.
 
 | Endpoint | Location | Source of the port |
 |---|---|---|
-| UI HTTP service | Computer LAN interface | Server default 4173, configurable with `--port` |
+| UI HTTP service | Console loopback (`nuvio.elf`, port 4173) | Payload default 4173 |
 | Native browser proxy | Console loopback | EVO source default 8686 |
 | ShadowMount control API | Console loopback | Helper source default 10101 |
 | ELF loader | Explicit console address | Configured loader, observed 9021 in the test |
 | FTP service | Explicit console address | Configured FTP service, observed 1337 in the test |
 
 The host UI and the loopback browser connection use HTTP. The public login
-endpoints use HTTPS. The proxy does not encrypt the host UI connection.
+endpoints use HTTPS. The proxy does not encrypt the loopback UI connection.
 
 ## Permissions and firmware
 
@@ -101,7 +104,7 @@ permission to bind the loopback proxy. [TESTED-ON-CONSOLE] The failed bind
 returned `errno=13` on firmware 13.60. File access alone therefore did not give
 the network permission the proxy needs.
 
-The helper matches `PPSA99997` and `eboot.bin` before it changes credentials, and
+The payload matches `PPSA99997` and `eboot.bin` before it changes credentials, and
 it checks the firmware against 13.60. It refuses a missing or ambiguous process
 match, applies the capability and authentication values from the SDK privilege
 example, then reads those values again to check the change.
@@ -110,15 +113,31 @@ The measured app-info buffer has 96 bytes with the title at byte 16. The SDK v0.
 sample places the title at byte 20. The helper uses the measured layout and
 refuses other firmware. This is an API buffer, not a kernel offset.
 
-The resident watcher checks every 500 milliseconds. The one-time helper checks
-once. Neither helper adds a new exploit or hypervisor access.
+The same payload also serves the browser UI from `webui/` in the title folder,
+because the title cannot bind its proxy until the payload grants the privilege.
+The payload watches once every quarter second, and the one-time helper `promote.elf`
+promotes once. Neither adds a new exploit or hypervisor access.
+
+## Browser UI hosting
+
+The build copies the Nuvio bundle into `webui/` inside the title folder, so the
+store archive is self-contained. `nuvio.elf` serves that folder on
+`127.0.0.1:4173` with GET and HEAD only, confined below the folder, and writes
+`/data/nuvio/nuvio.conf` on the first boot when the file is absent. The title's
+own proxy fetches the pages through it exactly as it fetched a LAN server before,
+so the hook injection, route resume and playback handoff keep working.
+
+A payload runs as its own process rather than inside the title, so the server is
+single-threaded and driven from the payload's own loop. [TESTED-ON-CONSOLE] A
+threaded accept loop bound the port and then stopped answering, while a loop on
+the process's main thread served every request.
 
 ## Persistent files
 
 | Console path | Purpose |
 |---|---|
-| `/data/homebrew/PPSA99997` | Native folder title |
-| `/data/nuvio/nuvio.conf` | Host UI origin |
+| `/data/homebrew/PPSA99997` | Native folder title, including `webui/` |
+| `/data/nuvio/nuvio.conf` | Console UI origin the title opens |
 | `/data/nuvio/webui/<host>_<port>.json` | Private browser state for that origin |
 | `/data/nuvio/addons.json` | Native addon manifest list |
 | `/data/nuvio/evo.log` | Private native diagnostics |
