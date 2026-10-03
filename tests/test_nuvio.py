@@ -197,6 +197,22 @@ ctx.__NUVIO_PS5__=false;router.persistWebOsResumeRoute('home',{});assert.equal(s
             subprocess.run([node,'-e',script,str(target)],check=True,timeout=10)
 
 
+class UIIndexTests(unittest.TestCase):
+    def test_ps5_index_paints_black_before_the_app_css(self):
+        source=('<!doctype html>\n<html lang="en">\n  <head>\n'
+                '    <link rel="stylesheet" href="css/bundle.css" />\n  </head>\n  <body></body>\n</html>\n')
+        html=build.patch_index(source)
+        self.assertLess(html.index('background-color:#000'),html.index('css/bundle.css'))
+        self.assertEqual(html.count('ps5-input.js'),1)
+        self.assertLess(html.index('ps5-input.js'),html.index('</head>'))
+
+    def test_ps5_index_refuses_moved_or_repeated_anchors(self):
+        with self.assertRaises(RuntimeError):
+            build.patch_index('<html><body>no head</body></html>')
+        with self.assertRaises(RuntimeError):
+            build.patch_index('<head></head><script src="ps5-input.js"></script>')
+
+
 class PlayerBackTests(unittest.TestCase):
     def test_nuvio_back_stops_session_native_back_retains_confirmation(self):
         import subprocess

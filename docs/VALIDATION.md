@@ -142,6 +142,45 @@ Recovery backups stay below `/data/homebrew/ps5-homebrew-dev`. The runtime and t
 artwork did not change during the exit correction. No reboot or system write
 occurred.
 
+## Nuvio 1.2.2 update, 2026-10-03
+
+[TESTED-ON-CONSOLE] The pinned Nuvio source moved from 1.2.1 to 1.2.2
+(`358d08cf`), and the official TV configuration moved to the 1.2.2 package.
+The EVO pin did not move: `main` at `21524a4a` is still the newest revision, and
+the newest EVO release asset is older than that commit. The rebuild changed only
+`eboot.bin` in the title inventory. The runtime, artwork and loading RML stayed
+byte-identical.
+
+[TESTED-ON-CONSOLE] The updater accepted the installed predecessor and replaced
+only `eboot.bin`, with `control-2` reporting an installed, unmounted folder.
+Six launches of the new eboot returned an accepted `launch_result`
+(`0x18` to `0xa018`, low value varying per launch). **The title never started**:
+`promote.elf` matched no running `PPSA99997` process on every probe, and
+`/data/nuvio/evo.log` gained no byte. Restoring the previous eboot
+`4989d4ca` and launching again made the process visible to `promote.elf` and
+resumed the log at build `21524a4a-nuvio_1001-1551`.
+
+An accepted launch response is therefore not execution, exactly as the working
+notes warn. The new eboot is [UNKNOWN] until it is retested with the app closed.
+The cause is not established. The console was left on the previous eboot.
+
+The host toolchain reproduces the previous build only in behaviour, not in bytes:
+two builds from the same sources differ in the signed container.
+
+[TESTED-ON-CONSOLE] The owner reported the whole app failing to load any catalog
+entry or thumbnail during this session. The cause was the console's DNS
+connectivity, not this change. The app recovered when connectivity did.
+
+[LOCALLY BUILT] The owner reported a white flash between the native splash screen
+and the Nuvio interface when a stream exits, visible in a dark room. The PS5
+browser paints its own document background before the Nuvio CSS applies. The
+served `index.html` now carries
+`<style>html,body{background-color:#000;margin:0}</style>` as the first element
+of `<head>`, so the first paint is black. `scripts/build.py` applies it through
+`patch_index()`, covered by two host tests. A headless browser confirmed the
+page background stays dark with the style first in the document. Owner
+confirmation of the stream-exit transition is pending.
+
 ## Host coverage
 
 [LOCALLY BUILT] Eight host regressions pass. They cover the HTTP handler, browser

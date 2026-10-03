@@ -151,6 +151,23 @@ def adapt(evo):
     script.write_text(s)
 
 
+def patch_index(html):
+    """Add the PS5 input bridge and a black first paint to Nuvio's index page.
+
+    The PS5 browser paints its own document background before the Nuvio CSS
+    applies. The white default flashes the whole screen when the browser
+    reopens after playback, so the served page must be black from the first
+    byte of <head>.
+    """
+    if html.count('<head>') != 1 or html.count('</head>') != 1:
+        raise RuntimeError('Pinned UI index head anchors changed')
+    if 'ps5-input.js' in html:
+        raise RuntimeError('UI index already carries the PS5 bridge')
+    html = html.replace('<head>',
+                        '<head>\n    <style>html,body{background-color:#000;margin:0}</style>')
+    return html.replace('</head>', '<script src="ps5-input.js"></script></head>')
+
+
 def configure_ui(ui):
     # Official release ships the publishable browser key; never use a privileged
     # Supabase service key or copy unrelated release client settings into Git.
@@ -179,7 +196,8 @@ def configure_ui(ui):
             raise RuntimeError('Pinned UI runtime config anchor changed')
     path.write_text(source)
     shutil.copyfile(ROOT/'scripts/ps5-input.js', ui/'ps5-input.js')
-    replace_once(ui/'index.html', '</head>', '<script src="ps5-input.js"></script></head>')
+    index = ui/'index.html'
+    index.write_text(patch_index(index.read_text()))
 
 
 def main():
