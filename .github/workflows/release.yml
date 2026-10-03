@@ -21,7 +21,7 @@ jobs:
           path: .cache
           key: nuvio-inputs-${{ hashFiles('deps.lock') }}
       - name: Install host tools
-        run: brew install llvm coreutils grep
+        run: brew install llvm lld coreutils grep
       - name: Add LLVM, coreutils and grep to PATH
         run: |
           echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
