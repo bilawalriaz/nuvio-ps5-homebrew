@@ -125,3 +125,15 @@ Tizen executables.
 
 The generated UI holds this public configuration. Keep `build/` outside Git and
 never substitute a Supabase service key.
+
+## Update a pinned input
+
+```sh
+make upstream
+```
+
+`scripts/update_upstreams.py` reports which `deps.lock` pins are behind their
+upstream release. It never writes `deps.lock` without `--apply`, which downloads
+and hashes each changed archive first. [Updating](UPDATING.md) is the full
+procedure, including the console steps and the verification that a launch
+actually ran.

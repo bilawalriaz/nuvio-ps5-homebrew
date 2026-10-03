@@ -86,6 +86,7 @@ to `build/EVO-PLAYER-PS5-*/output/app/PPSA99997/` and the helpers to
 |---|---|
 | Install, start or update Nuvio | [Operations](docs/OPERATIONS.md) |
 | Build the port | [Build](docs/BUILD.md) |
+| Update to a newer Nuvio or EVO revision | [Updating](docs/UPDATING.md) |
 | Understand the browser and native player | [Architecture](docs/ARCHITECTURE.md) |
 | Check what the console tests establish | [Validation](docs/VALIDATION.md) |
 | Cut a release | [Release](docs/RELEASE.md) |
