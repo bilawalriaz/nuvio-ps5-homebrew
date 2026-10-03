@@ -1,4 +1,4 @@
-/* GPL-3.0. Nuvio 48a94b347837965e2e052f82707820c0dd7c8028 route-resume methods. */
+/* GPL-3.0. Nuvio 358d08cf7496b4ba04fd62a4aaaa19cab78d7aa8 route-resume methods. */
     isWebOsResumeRouteRestorable(routeName = this.current) {
       const route = String(routeName || "").trim();
       return Boolean(route && this.routes[route] && !WEBOS_NON_RESTORABLE_ROUTES.has(route));

@@ -136,7 +136,7 @@ def adapt(evo):
                   if line.startswith('find "${APPDIR}" -type f -printf') else line
                   for line in s.splitlines()) + '\n'
     s = s.replace('BUILD_SHA="$(git -C "${EVO}" rev-parse --short=8 HEAD 2>/dev/null || echo unknown)"',
-                  'BUILD_SHA="21524a4a-nuvio"')
+                  'BUILD_SHA="'+fetch('evo-player-nuvio-source')[0]['commit'][:8]+'-nuvio"')
     script.write_text(s)
 
 

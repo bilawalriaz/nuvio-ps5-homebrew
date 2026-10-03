@@ -1,4 +1,4 @@
-.PHONY: build ui test check docs-check release
+.PHONY: build ui test check docs-check release upstream
 build:
 	python3 scripts/build.py
 ui:
@@ -11,3 +11,5 @@ check: test docs-check
 	python3 scripts/check.py
 release:
 	python3 scripts/package_release.py
+upstream:
+	python3 scripts/update_upstreams.py
