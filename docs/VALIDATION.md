@@ -151,21 +151,30 @@ the newest EVO release asset is older than that commit. The rebuild changed only
 `eboot.bin` in the title inventory. The runtime, artwork and loading RML stayed
 byte-identical.
 
-[TESTED-ON-CONSOLE] The updater accepted the installed predecessor and replaced
-only `eboot.bin`, with `control-2` reporting an installed, unmounted folder.
-Six launches of the new eboot returned an accepted `launch_result`
-(`0x18` to `0xa018`, low value varying per launch). **The title never started**:
-`promote.elf` matched no running `PPSA99997` process on every probe, and
-`/data/nuvio/evo.log` gained no byte. Restoring the previous eboot
-`4989d4ca` and launching again made the process visible to `promote.elf` and
-resumed the log at build `21524a4a-nuvio_1001-1551`.
+[TESTED-ON-CONSOLE] The first rebuild did not start. Six launches returned an
+accepted `launch_result` (`0x18` to `0xa018`, low value varying per launch)
+while `promote.elf` matched no running `PPSA99997` process and
+`/data/nuvio/evo.log` gained no byte. Restoring the previous eboot `4989d4ca`
+and launching again made the process visible to `promote.elf` and resumed the log.
 
-An accepted launch response is therefore not execution, exactly as the working
-notes warn. The new eboot is [UNKNOWN] until it is retested with the app closed.
-The cause is not established. The console was left on the previous eboot.
+[SOURCE-VERIFIED] The cause was the link, not the sources. The packaging step
+expands `${PS5_SYSROOT}/lib` with a shell glob, and with `--as-needed` the first
+stub that satisfies a kernel symbol is the one recorded in the module's import
+table. Under the ambient UTF-8 collation `libkernel_web.so` sorted before
+`libkernel.so`, so the module imported `libkernel_web.prx`, the browser-safe stub.
+The working build imports `libkernel.prx`. `scripts/build.py` now pins `LC_ALL=C`
+and [Build](BUILD.md) explains why.
 
-The host toolchain reproduces the previous build only in behaviour, not in bytes:
-two builds from the same sources differ in the signed container.
+[TESTED-ON-CONSOLE] With that fix the rebuilt title starts and runs. The log
+records `BUILD 21524a4a-nuvio-dirty_1003-1441`, the proxy hook injected into `/`,
+660718 bytes of browser storage restored and the route `home`. An accepted launch
+response is still not execution: check `promote.elf` and the log build string
+every time.
+
+[TESTED-ON-CONSOLE] The owner reports that a launch sometimes needs several
+attempts before the title stays up. One attempt in this session was lost the same
+way. Treat a single failed launch as inconclusive and retry before recording a
+failure.
 
 [TESTED-ON-CONSOLE] The owner reported the whole app failing to load any catalog
 entry or thumbnail during this session. The cause was the console's DNS
@@ -193,8 +202,10 @@ is not established.
 [TESTED-ON-CONSOLE] The title icon was replaced with the repository artwork in
 `assets/icon.png` (512x512). The console copy verified byte-for-byte at
 `90ed6493`, and the previous icon (1fe88349) is kept under
-`/data/homebrew/ps5-homebrew-dev`. The PS5 caches a title icon, so the tile may
-show the old artwork until the title is re-registered or the console restarts.
+`/data/homebrew/ps5-homebrew-dev`. The PS5 caches a title icon. A second
+registration reported `changed:false` and left the icon URL stamp at
+`v=1790864733-28006`, so the home-screen tile keeps the old artwork until the
+title record is recreated.
 
 ## Host coverage
 
