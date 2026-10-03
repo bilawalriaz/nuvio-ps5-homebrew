@@ -24,11 +24,9 @@ Version `0.1.0-alpha.1`.
 - macOS with Xcode command-line tools, Homebrew LLVM and Node.js, only to build
   the native title yourself.
 
-The permission helper accepts firmware 13.60 only.
-
 ## Install
 
-1. Download `PPSA99997.zip` from the
+1. Download `PPSA99997.zip` and `permission-watcher.elf` from the
    [latest release](https://github.com/bilawalriaz/nuvio-ps5-homebrew/releases/latest).
 2. Unpack the archive.
 3. Copy the `PPSA99997` folder to `/data/homebrew/` on the console over FTP.

@@ -85,6 +85,6 @@ as a release asset. Users add that URL under Sources in PS5 Payload Manager.
 2. Keep complete corresponding sources for the GPL components you distribute.
    The source directory holds this integration, not every upstream archive.
 3. Keep upstream notices and licences with the build.
-4. Check the archive for account identifiers, signed URLs and owner
+4. Check the archive for account identifiers, signed URLs and private
    configuration.
 5. Keep `/data/nuvio` in any upgrade procedure.
