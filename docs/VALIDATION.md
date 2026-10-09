@@ -592,3 +592,24 @@ services, and left Nuvio closed with no Nuvio helper loaded. Same endpoint.
 The complete ordinary-open build then passed receipt-verified feedback:
 embedded promotion, bind/listen, packaged HTTP200 and route profileSelection.
 The private hardware log records the exact command and full environment tuple.
+
+## Alpha.4 artwork build, 2026-10-09
+
+[LOCALLY BUILT] Replaced the title icon with the supplied 512×512 logo and both
+launch images with the supplied 1920×1080 wallpaper. The title content version
+is `01.000.004`. `make check`, `NUVIO_WORK_DIR=/tmp/nuvio-alpha4-build make
+build` and `NUVIO_WORK_DIR=/tmp/nuvio-alpha4-build make release` passed.
+
+The local `PPSA99997.zip` SHA-256 is
+`e50bb82f809f459149374a468087c4ea8d0cd1cb755995d10afa24823063ebce`. Its
+`eboot.bin` SHA-256 is
+`10794a7e86151ee32157209ab7c58256a53b62cd777985f7e1c41a62918224be`.
+The icon SHA-256 is
+`d5a3f3d4288081e055cd1013e61f61d2e8ac4af80172cd3c30da1cbf7b4cb3c4`, and both
+launch images have SHA-256
+`e4d78b2eb802a94c2c7dd02ce8fed16932ebb92541470698cd6f56b32b8ecf66`.
+
+[UNKNOWN] We have not installed alpha.4 on the console.
+After publishing, install that exact `PPSA99997.zip`, run receipt-verified
+feedback, and record the resulting eboot hash and visible launch artwork in the
+private hardware log.
