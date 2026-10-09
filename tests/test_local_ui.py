@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 }
 ''')
         cls.binary = cls.directory / 'local_ui_harness'
-        flags = ['-std=c11', '-Wall', '-Wextra', '-Werror']
+        flags = ['-std=c11', '-D_DEFAULT_SOURCE', '-Wall', '-Wextra', '-Werror']
         if os.environ.get('NUVIO_HOST_SANITIZERS') == '1':
             flags += ['-fsanitize=address,undefined', '-fno-omit-frame-pointer']
         subprocess.run([compiler, *flags, '-I', str(ROOT / 'scripts'), str(harness),

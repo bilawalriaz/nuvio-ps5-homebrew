@@ -64,9 +64,9 @@ class BootstrapTests(unittest.TestCase):
             '#define NUVIO_BOOTSTRAP_PORT 9021\nstatic const unsigned char nuvio_bootstrap_elf[]={0};\n')
         (cls.directory/'harness.c').write_text(HARNESS);cls.exe=cls.directory/'test'
         flags=['-fsanitize=address,undefined','-fno-omit-frame-pointer'] if os.environ.get('NUVIO_HOST_SANITIZERS')=='1' else []
-        subprocess.run([compiler,'-std=c11','-O1','-Wall','-Wextra','-Werror',*flags,
+        subprocess.run([compiler,'-std=c11','-D_DEFAULT_SOURCE','-O1','-Wall','-Wextra','-Werror',*flags,
             '-I',str(ROOT/'scripts'),'-I',str(cls.directory),str(ROOT/'scripts/bootstrap.c'),
-            str(cls.directory/'harness.c'),'-o',str(cls.exe)],check=True,capture_output=True)
+            str(cls.directory/'harness.c'),'-o',str(cls.exe)],check=True)
     @classmethod
     def tearDownClass(cls): cls.tmp.cleanup()
     def run_mode(self,mode):
