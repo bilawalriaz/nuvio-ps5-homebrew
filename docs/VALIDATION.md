@@ -609,7 +609,13 @@ The icon SHA-256 is
 launch images have SHA-256
 `e4d78b2eb802a94c2c7dd02ce8fed16932ebb92541470698cd6f56b32b8ecf66`.
 
-[UNKNOWN] We have not installed alpha.4 on the console.
-After publishing, install that exact `PPSA99997.zip`, run receipt-verified
-feedback, and record the resulting eboot hash and visible launch artwork in the
-private hardware log.
+[LOCALLY BUILT] The published alpha.4 `PPSA99997.zip` SHA-256 is
+`7173168bded10ebf703502b3db7db99b5a3f2717c6c18ef23456e435eae79e94`. Its
+`eboot.bin` SHA-256 is
+`55d112286955a973fab49574d97c610ad9ff1b5fe5a89e20938bcdc82dcf770b`. The
+release archive passed `unzip -t`. Its icon and launch images match the source
+asset hashes above.
+
+[UNKNOWN] We have not installed alpha.4 on the console. Install that exact
+`PPSA99997.zip`, run receipt-verified feedback, and record the observed eboot
+hash and launch artwork in the private hardware log.
