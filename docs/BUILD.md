@@ -195,3 +195,39 @@ loopback loader before starting its browser listener. The build requires an
 explicit loader port. The receipt records the embedded ELF hash and size.
 The transfer has a deadline and requires the promotion helper's verified response.
 Read [Validation](VALIDATION.md) for the current console result.
+
+## Fast console loop
+
+Export your console address, FTP port and ELF-loader port as described in Operations.
+Keep the receipt from the installed build in an ignored local file.
+
+```sh
+make check
+make build
+python3 scripts/update.py --previous-receipt config/installed-build.json
+cp build/build.json config/installed-build.json
+make feedback
+```
+
+Update and feedback close Nuvio automatically with the fixed-title helper.
+The updater verifies the predecessor and staged files before replacement.
+Feedback verifies the raw installed eboot, launches the app and reads fresh startup events.
+Its UI gate requires packaged HTTP200 responses and a Nuvio page route.
+Use `make close` to close Nuvio independently.
+
+For a loader on another port, build with `make build LOADER_PORT=<port>`.
+The downloadable single-install build uses 9021.
+
+## Update only the browser inputs
+
+```sh
+python3 scripts/update_upstreams.py --apply --only nuvio-tv-source --only nuvio-official-tv-config
+make check
+make build
+```
+
+The update tool downloads and hashes fixed revisions before changing deps.lock.
+Review the derived files it prints, then run the console loop above.
+Update EVO separately with `--only evo-player-nuvio-source`.
+Update the SDK and pacbrew separately because they change target libraries.
+Keep the previous receipt and raw eboot backup until console checks pass.
