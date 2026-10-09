@@ -35,9 +35,11 @@ The final path must be `/data/homebrew/PPSA99997/eboot.bin`, with `webui/`
 and `sce_sys/` beside it. Avoid an extra nested `PPSA99997` folder.
 See [the beginner guide](docs/GETTING_STARTED.md) for updates and troubleshooting.
 
-Release `0.1.0-alpha.2` uses the older separate `nuvio.elf` startup step.
-The single-install implementation is on this branch. Check the release notes
-when choosing a download.
+Release `0.1.0-alpha.2` needed a separate `nuvio.elf` startup payload. In
+`v0.1.0-alpha.4`, `PPSA99997.zip` includes the permission helper and the title
+starts it automatically. You do not need to transfer a separate `nuvio.elf`.
+The current boot still needs the jailbreak, ShadowMount and the ELF loader on
+port 9021.
 
 ## Build from source
 
