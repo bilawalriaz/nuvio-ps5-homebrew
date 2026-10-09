@@ -7,7 +7,7 @@ Player's native engine. Nuvio supplies the account, catalogue and addon screens.
 EVO supplies the controller input, audio and hardware video decoding.
 
 This is a community project with no connection to Sony, NuvioMedia or EVO Player.
-Version `0.1.0-alpha.2`.
+
 
 ## What it does
 
@@ -16,38 +16,28 @@ Version `0.1.0-alpha.2`.
 - Reopens the browser on your last Nuvio page when playback stops.
 - Moves browser focus with the D-pad, so X activates the item you selected.
 
-## Requirements
+## Start here
 
-- A retail PS5 on firmware 13.60 with a jailbreak for the current boot. Keep the
-  console on 13.60.
-- An ELF loader, an FTP service and ShadowMount running on the console.
-- One payload pushed to the ELF loader once per boot. The app runs without a
-  computer. The console serves its own interface.
-- macOS with Xcode command-line tools, Homebrew LLVM and Node.js, only to build
-  the native title yourself.
+You need a PS5 on firmware **13.60**, jailbroken for the current boot, with
+ShadowMount and an ELF loader listening on port **9021**. Keep the console on 13.60.
 
-## Install
+The new single-install build includes its permission helper and browser UI.
+Open Nuvio from its home-screen tile. The app loads the helper automatically.
+After a reboot, run your jailbreak again before opening Nuvio.
 
-1. Download `nuvio-ps5-<version>.zip` from the
-   [latest release](https://github.com/bilawalriaz/nuvio-ps5-homebrew/releases)
-   and unpack it. The PS5 Homebrew Store also carries the title alone as
-   `PPSA99997.zip`.
-2. Copy the `PPSA99997` folder to `/data/homebrew/` on the console over FTP. The
-   folder carries the browser interface.
-3. Push `nuvio.elf` to the ELF loader once for this boot.
-4. Launch Nuvio from the console home screen.
+1. Download `PPSA99997.zip` for the single-install version and unpack it.
+2. Start FTP on the PS5 and note its address and port.
+3. Connect with an FTP client, then copy `PPSA99997` into `/data/homebrew/`.
+4. Refresh ShadowMount's homebrew list and wait for the Nuvio tile.
+5. Open Nuvio. Sign in or configure your addons, then choose something to watch.
 
-`nuvio.elf` grants the title its network privilege and serves the interface from
-the installed folder over loopback. It writes `/data/nuvio/nuvio.conf` on the
-first boot when the file is absent, so no manual server address step exists.
+The final path must be `/data/homebrew/PPSA99997/eboot.bin`, with `webui/`
+and `sce_sys/` beside it. Avoid an extra nested `PPSA99997` folder.
+See [the beginner guide](docs/GETTING_STARTED.md) for updates and troubleshooting.
 
-The complete package also carries the build and recovery helpers, `payloads.json`
-for [PS5 Payload Manager](https://github.com/itsPLK/ps5-payload-manager), and the
-source. Add the `payloads.json` URL under Sources in the manager to load the one
-payload from its dashboard.
-
-The full source build can drive the same install through FTP. See
-[Operations](docs/OPERATIONS.md) for addresses, helper order and recovery.
+Release `0.1.0-alpha.2` uses the older separate `nuvio.elf` startup step.
+The single-install implementation is on this branch. Check the release notes
+when choosing a download.
 
 ## Build from source
 
@@ -68,15 +58,12 @@ to `build/EVO-PLAYER-PS5-*/output/app/PPSA99997/` and the helpers to
 - Player settings opens the native EVO interface. Playback started there keeps
   EVO's own stop confirmation.
 
-## Limits
+## Requirements and codec support
 
-- Firmware 13.60 only. The payload refuses other firmware.
-- The payload serves the interface from the installed title folder. If it is not
-  running, the browser shows a load error.
-- Software AV1 through dav1d is not in this build. Other codecs, subtitles and
-  long sessions still need testing.
-- The jailbreak clears on reboot. Start the loader, FTP and ShadowMount again,
-  then push the payload once for the new boot.
+- Firmware 13.60, ShadowMount and the current boot's ELF loader on port 9021.
+- Use FTP for manual installation and updates.
+- Software AV1 through dav1d is not included.
+- To build from source, install macOS host tools: Xcode command-line tools, Homebrew LLVM and Node.js.
 
 ## Documentation
 

@@ -33,6 +33,21 @@ def digest(p):
         return hashlib.file_digest(f, 'sha256').hexdigest()
 
 
+def sdk_install_auth_profile(makefile):
+    """Read the public SDK install_app sample's exact signing metadata."""
+    joined = makefile.replace('\\\n', ' ')
+    authority = re.findall(r'^AUTHID\s*:=\s*(0x[0-9A-Fa-f]+)\s*$', joined, re.MULTILINE)
+    info = re.findall(r'^AUTHINFO\s*:=\s*([0-9A-Fa-f \t]+)$', joined, re.MULTILINE)
+    if len(authority) != 1 or len(info) != 1:
+        raise RuntimeError('Pinned SDK signing profile declarations changed')
+    values = info[0].split()
+    if len(values) != 0x88 or any(not re.fullmatch('[0-9A-Fa-f]{2}', value) for value in values):
+        raise RuntimeError('SDK authentication info must contain exactly 136 bytes')
+    if not 0 <= int(authority[0], 16) <= 0xffffffffffffffff:
+        raise RuntimeError('SDK authority exceeds its 64-bit field')
+    return {'authority': authority[0], 'auth_info': ''.join(values).lower()}
+
+
 def lld_available():
     """prospero-lld resolves ld.lld from the LLVM prefix or the lld formula prefix."""
     if shutil.which('ld.lld'):
@@ -91,7 +106,105 @@ def fix_provider_seek(demux, controller):
     return demux, controller
 
 
-def adapt(evo):
+def instrument_loopback_server(source):
+    """Log proxy socket, bind, listen and browser accept as separate results."""
+    replacements = (
+        ('    int fd = socket(AF_INET, SOCK_STREAM, 0);\n'
+         '    if (fd < 0) { LOG("server: socket errno=%d", errno); return; }',
+         '    int fd = socket(AF_INET, SOCK_STREAM, 0);\n'
+         '    if (fd < 0) { LOG("server: socket failed errno=%d", errno); return; }\n'
+         '    LOG("server: socket ok fd=%d", fd);'),
+        ('    if (bind(fd, (struct sockaddr *)&a, sizeof a) != 0 || listen(fd, 16) != 0) {\n'
+         '        LOG("server: bind/listen 127.0.0.1:%d failed errno=%d", s_port, errno);\n'
+         '        close(fd);\n'
+         '        return;\n'
+         '    }',
+         '    if (bind(fd, (struct sockaddr *)&a, sizeof a) != 0) {\n'
+         '        int error = errno;\n'
+         '        LOG("server: bind failed port=%d errno=%d", s_port, error);\n'
+         '        close(fd);\n'
+         '        return;\n'
+         '    }\n'
+         '    LOG("server: bind ok 127.0.0.1:%d", s_port);\n'
+         '    if (listen(fd, 16) != 0) {\n'
+         '        int error = errno;\n'
+         '        LOG("server: listen failed port=%d errno=%d", s_port, error);\n'
+         '        close(fd);\n'
+         '        return;\n'
+         '    }\n'
+         '    LOG("server: listen ok port=%d", s_port);'),
+        ('        int c = accept(s_listen_fd, NULL, NULL);\n'
+         '        if (c >= 0 && s_srv_stop) { close(c); break; }',
+         '        int c = accept(s_listen_fd, NULL, NULL);\n'
+         '        if (c >= 0 && s_srv_stop) { close(c); break; }\n'
+         '        if (c >= 0) LOG("server: connection accepted");'),
+    )
+    for old, new in replacements:
+        if source.count(old) != 1:
+            raise RuntimeError('Pinned EVO loopback server anchor changed')
+        source = source.replace(old, new)
+    return source
+
+
+def bypass_loopback_origin_preflight(source):
+    """Open EVO's browser so it can probe the local proxy without its UI server."""
+    old = '''        if (s_check_rc < 0) {
+            char m[256];
+'''
+    # adapt() inserts this only for a diagnostic build. A preprocessor guard
+    # would also need a compiler definition; the earlier guard had none and
+    # silently left the missing-server preflight active.
+    new = '''        if (s_check_rc < 0) {
+            LOG("preflight bypassed for unpromoted loopback diagnostic");
+            s_check_rc = 1;
+        }
+        if (s_check_rc < 0) {
+            char m[256];
+'''
+    if source.count(old) != 1:
+        raise RuntimeError('Pinned EVO preflight anchor changed')
+    return source.replace(old, new)
+
+
+def title_ui_sources(web, provider):
+    """Serve the packaged page on EVO's existing listener for the Nuvio profile."""
+    replacements = (
+        ('#include "evo_webui.h"', '#include "evo_webui.h"\n#include "local_ui.h"'),
+        ('        else\n            proxy_request(fd, req, got, hl, method, path);',
+         '''        else if (!strcmp(s_hook_profile, "nuvio")) {
+            char tag[96];
+            size_t tag_len = is_html_entry(path) ? hook_tag(tag, sizeof tag) : 0;
+            int status = nuvio_local_ui_send(fd,
+                "/data/homebrew/PPSA99997/webui", method, path, tag, tag_len);
+            LOG("title-ui: response status=%d", status);
+        } else
+            proxy_request(fd, req, got, hl, method, path);'''),
+        ('    s_check_rc = 0;\n    pthread_t t;',
+         '''    /* Packaged Nuvio files need no second HTTP process. Keep the
+     * configured origin as the browser-storage key for existing profiles. */
+    if (!strcmp(s_hook_profile, "nuvio")) {
+        s_check_rc = 1;
+        s_state = P_CHECK;
+        s_frames = 0;
+        LOG("title-ui: packaged assets selected");
+        return 0;
+    }
+    s_check_rc = 0;
+    pthread_t t;'''),
+    )
+    for old, new in replacements:
+        if web.count(old) != 1:
+            raise RuntimeError('Pinned title-local UI anchor changed')
+        web = web.replace(old, new)
+    # Fresh installations must be configured before any external helper runs.
+    old = "    g_host[0] = '\\0';\n    g_port = NUVIO_DEFAULT_PORT;"
+    if provider.count(old) != 1:
+        raise RuntimeError('Pinned Nuvio provider initialization changed')
+    provider = provider.replace(old, '    snprintf(g_host, sizeof g_host, "127.0.0.1");\n    g_port = 4173;')
+    return web, provider
+
+
+def adapt(evo, loopback_diagnostic=False, title_ui=False, auto_bootstrap=False):
     """Keep the native player; open its existing Nuvio bridge at startup."""
     app = evo/'projects/evoplayer'
     param_path = app/'sce_sys/param.json'
@@ -128,6 +241,41 @@ def adapt(evo):
     replace_once(app/'src/evo_webui.c',
                  '2, 108,  0, 1812, 1080, 0x0, 0x0',
                  '2,   0,  0, 1920, 1080, 0x0, 0x0')
+    web = app/'src/evo_webui.c'
+    web_source = instrument_loopback_server(web.read_text())
+    if loopback_diagnostic:
+        web_source = bypass_loopback_origin_preflight(web_source)
+    if title_ui:
+        provider = app/'addons/src/provider_nuvio.c'
+        web_source, provider_source = title_ui_sources(web_source, provider.read_text())
+        provider.write_text(provider_source)
+        for name in ('local_ui.c', 'local_ui.h'):
+            shutil.copyfile(ROOT/'scripts'/name, app/'src'/name)
+        # Reuse the payload server's path and MIME helpers. Its listener is
+        # never called by the title; requests use EVO's existing connection.
+        shutil.copyfile(ROOT/'scripts/ui_server.c', app/'src/nuvio_ui_files.c')
+        replace_once(app/'Makefile',
+                     'C_SRCS := $(PP_SRCS) $(UI_SRCS) $(MEDIA_SRCS) $(ADDON_SRCS)',
+                     'C_SRCS := $(PP_SRCS) $(UI_SRCS) $(MEDIA_SRCS) $(ADDON_SRCS) src/local_ui.c src/nuvio_ui_files.c')
+    if auto_bootstrap:
+        web_source = web_source.replace('#include "evo_webui.h"', '#include "evo_webui.h"\n#include "bootstrap.h"')
+        anchor = '    if (s_listen_fd >= 0) return;\n    int fd = socket(AF_INET, SOCK_STREAM, 0);'
+        if web_source.count(anchor) != 1:
+            raise RuntimeError('Pinned server bootstrap anchor changed')
+        web_source = web_source.replace(anchor, '''    if (s_listen_fd >= 0) return;
+    if (!strcmp(s_hook_profile, "nuvio")) {
+        LOG("bootstrap: promotion requested");
+        int rc = nuvio_bootstrap();
+        if (rc == 0) LOG("bootstrap: promotion verified errno=0");
+        else LOG("bootstrap: promotion failed stage=%s errno=%d", nuvio_bootstrap_stage(), errno);
+        if (rc != 0) return;
+    }
+    int fd = socket(AF_INET, SOCK_STREAM, 0);''')
+        for name in ('bootstrap.c', 'bootstrap.h'):
+            shutil.copyfile(ROOT/'scripts'/name, app/'src'/name)
+        replace_once(app/'Makefile', 'src/local_ui.c src/nuvio_ui_files.c',
+                     'src/local_ui.c src/nuvio_ui_files.c src/bootstrap.c')
+    web.write_text(web_source)
     # Provider sources intentionally have no local path. Check the demuxer,
     # and never announce an unqueued seek to the playback state machine.
     demux = app/'media/src/evo_demux.c'
@@ -213,7 +361,16 @@ def configure_ui(ui):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--ui-only', action='store_true')
+    ap.add_argument('--auto-bootstrap', type=int, metavar='LOADER_PORT',
+                    help='Embed promotion helper and submit it to the specified loopback loader port')
+    ap.add_argument('--auth-profile', choices=('default', 'sdk-install-app'), default='default',
+                    help='Signing metadata for a controlled permission test')
+    ap.add_argument('--title-ui', action='store_true',
+                    help='Serve packaged UI files inside the title for a single-install test')
     args = ap.parse_args()
+    if args.auto_bootstrap is not None and (not args.title_ui or not 1 <= args.auto_bootstrap <= 65535):
+        ap.error('--auto-bootstrap requires --title-ui and a valid loader port')
+    loopback_diagnostic = os.environ.get('NUVIO_UNPROMOTED_LOOPBACK_DIAGNOSTIC') == '1'
     CACHE.mkdir(parents=True, exist_ok=True)
     WORK.mkdir(parents=True, exist_ok=True)
     nv = source('nuvio-tv-source')
@@ -244,7 +401,7 @@ def main():
         if p.is_file():
             p.chmod(p.stat().st_mode | 0o111)
     evo = source('evo-player-nuvio-source')
-    adapt(evo)
+    adapt(evo, loopback_diagnostic=loopback_diagnostic, title_ui=args.title_ui, auto_bootstrap=args.auto_bootstrap is not None)
     polish.apply(evo, nv)
     patches.write_patch(fetch('evo-player-nuvio-source')[1], evo, ROOT/'patches/evo.patch')
     patches.write_patch(fetch('nuvio-tv-source')[1], nv, ROOT/'patches/nuvio.patch')
@@ -255,6 +412,23 @@ def main():
                PS5_LLD=shutil.which('ld.lld') or '',
                NUVIO_MAC_SDK=subprocess.check_output(['xcrun', '--show-sdk-path'], text=True).strip())
     env['PATH'] = ':'.join([core+'/libexec/gnubin', llvm+'/bin', str(sdk/'bin'), env['PATH']])
+    bootstrap_metadata = None
+    if args.auto_bootstrap is not None:
+        payload = WORK/'bootstrap-promote.elf'
+        run([sdk/'bin/prospero-clang', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+             ROOT/'scripts/promote.c', '-lkernel_sys', '-lkernel_web', '-o', payload], env=env)
+        import elfcheck
+        elfcheck.validate(str(payload))
+        raw = payload.read_bytes()
+        if len(raw) > 1048576:
+            raise RuntimeError('Bootstrap ELF exceeds the transfer bound')
+        blob = evo/'projects/evoplayer/src/nuvio_bootstrap_blob.h'
+        blob.write_text('#define NUVIO_BOOTSTRAP_PORT '+str(args.auto_bootstrap)+'\n'+
+                        'static const unsigned char nuvio_bootstrap_elf[] = {\n'+
+                        ',\n'.join(','.join('0x'+raw[i:i+16][j:j+1].hex() for j in range(len(raw[i:i+16])))
+                                    for i in range(0,len(raw),16))+'\n};\n')
+        bootstrap_metadata = {'loader_port': args.auto_bootstrap, 'payload_sha256': digest(payload),
+                              'payload_bytes': len(raw)}
     # The app link expands "${PS5_SYSROOT}/lib"/*.so and relies on libkernel.so
     # coming before libkernel_web.so: with --as-needed the first stub that
     # satisfies a symbol is the one recorded in DT_NEEDED, and the module
@@ -263,15 +437,30 @@ def main():
     # C collation restores libkernel.prx. Do not remove this.
     env['LC_ALL'] = 'C'
     run(['bash', evo/'scripts/package-app.sh'], cwd=evo, env=env)
+    auth_profile = None
+    if args.auth_profile == 'sdk-install-app':
+        # This is metadata from a pinned public example, not inferred capability
+        # bits. Hardware must establish whether the resident HEN honours it.
+        profile_source = sdk/'samples/install_app/Makefile'
+        auth_profile = sdk_install_auth_profile(profile_source.read_text())
+        tool = evo/'output/app/.build/host/ps5-native-tool'
+        run([tool, 'self', '--sign', '--in', evo/'output/app/.build/eboot.elf',
+             '--out', evo/'output/app'/TITLE/'eboot.bin', '--magic', '0x1D3D154F',
+             '--authority', auth_profile['authority'], '--auth-info', auth_profile['auth_info']])
+        run([tool, 'self', '--inspect', '--file', evo/'output/app'/TITLE/'eboot.bin'])
+        auth_profile = {**auth_profile, 'source': 'SDK samples/install_app/Makefile',
+                        'source_sha256': digest(profile_source)}
     # Reuse the reviewed, fixed-purpose controls with Nuvio's own identity.
     control = (ROOT/'vendor/control.c').read_text().replace('AURORA', 'NUVIO').replace('Aurora', 'Nuvio').replace('aurora', 'nuvio').replace('PPSA99998', TITLE)
     control = control.replace('../../payloads/common/sha256.h', str(ROOT/'vendor/sha256.h'))
     (WORK/'control.c').write_text(control)
-    for action in (1, 2, 3, 4):
-        inputs = [WORK/'control.c'] + ([ROOT/'vendor/sha256.c'] if action == 4 else [])
+    for action in (1, 2, 3, 4, 5):
+        inputs = [WORK/'control.c'] + ([ROOT/'vendor/sha256.c'] if action in (4, 5) else [])
         run([sdk/'bin/prospero-clang', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
              '-DNUVIO_CONTROL_ACTION='+str(action), *inputs, '-lkernel_sys', '-lkernel_web',
              '-lSceUserService', '-lSceSystemService', '-o', WORK/('control-'+str(action)+'.elf')], env=env)
+    run([sdk/'bin/prospero-clang', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+         ROOT/'scripts/close.c', '-lkernel_sys', '-lkernel_web', '-o', WORK/'close.elf'], env=env)
     run([sdk/'bin/prospero-clang', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
          ROOT/'scripts/promote.c', '-lkernel_sys', '-lkernel_web',
          '-o', WORK/'promote.elf'], env=env)
@@ -288,11 +477,14 @@ def main():
     shutil.rmtree(dist/'webui', ignore_errors=True)
     shutil.copytree(WORK/'ui', dist/'webui')
     receipt = {'title_id': TITLE, 'firmware_validation': '[UNKNOWN]',
+               'ui_hosting': 'title' if args.title_ui else 'boot-payload',
+               'automatic_bootstrap': bootstrap_metadata, 'auth_profile': args.auth_profile, 'auth_profile_metadata': auth_profile,
+               'diagnostic_mode': 'unpromoted_loopback' if loopback_diagnostic else None,
                # Explicit names, not a glob: a stale helper from an earlier
                # build in the same work directory must not enter the receipt.
                'helpers': {name: digest(WORK/name) for name in (
-                   'control-1.elf', 'control-2.elf', 'control-3.elf', 'control-4.elf',
-                   'promote.elf', 'nuvio.elf')},
+                   'control-1.elf', 'control-2.elf', 'control-3.elf', 'control-4.elf', 'control-5.elf',
+                   'promote.elf', 'nuvio.elf', 'close.elf')},
                'source_pins': {k: fetch(k)[0]['sha256'] for k in ('nuvio-tv-source','evo-player-nuvio-source','nuvio-pacbrew','ps5-payload-sdk-prebuilt','nuvio-official-tv-config')},
                'files': {str(p.relative_to(dist)): digest(p) for p in dist.rglob('*') if p.is_file()}}
     (WORK/'build.json').write_text(json.dumps(receipt, indent=2)+'\n')

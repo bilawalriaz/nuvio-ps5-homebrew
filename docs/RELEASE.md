@@ -45,13 +45,11 @@ make release
 | Artifact | Contents |
 |---|---|
 | `PPSA99997.zip` | The `<TITLEID>/` app folder, including `webui/`. This is the store artifact. |
-| `nuvio-ps5-<version>.zip` | The complete package: app, `nuvio.elf`, helpers, UI source, receipts. |
-| `nuvio.elf` | The single boot payload for Payload Manager. |
-| `payloads.json` | A Payload Manager source listing `nuvio.elf` with its hash. |
+| `nuvio-ps5-<version>.zip` | The complete package: app, development helpers, UI source and receipts. |
 | `SHA256SUMS` | Hashes for the release assets. |
 
 `PPSA99997.zip` unpacks to a single `PPSA99997/` folder. Users copy that folder to
-`/data/homebrew/` and push `nuvio.elf` once per boot. The complete package keeps
+`/data/homebrew/` and open Nuvio after the current boot's jailbreak starts ShadowMount and the ELF loader. The complete package keeps
 the source, the browser UI and the build helpers for a scripted install.
 
 `make release` recreates `release/` and writes `release/ASSETS` with the exact
@@ -80,10 +78,11 @@ The daily catalog job follows new releases, so keep the asset name stable and
 raise `contentVersion` each time. Submit an update only when the release changes
 the listing fields.
 
-## Payload Manager source
+## Startup helper
 
-`payloads.json` lists each helper with its download URL and SHA-256. Publish it
-as a release asset. Users add that URL under Sources in PS5 Payload Manager.
+The single-install store artifact includes the promotion ELF inside eboot.bin.
+The title sends it to the loopback loader and verifies its response before binding.
+Development and recovery helpers stay in the complete source package.
 
 ## Distribution rules
 

@@ -7,9 +7,42 @@ import io
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 import urllib.parse
+import uuid
 from build import WORK, ROOT, TITLE
 from install import helper
+
+
+def safe_param_update(before, after):
+    """Allow a title content-version bump while keeping every other field fixed."""
+    try:
+        old=json.loads(before)
+        new=json.loads(after)
+        old_version=old.pop('contentVersion')
+        new_version=new.pop('contentVersion')
+        old_parts=tuple(int(part) for part in old_version.split('.'))
+        new_parts=tuple(int(part) for part in new_version.split('.'))
+    except (TypeError, ValueError, AttributeError, KeyError):
+        return False
+    return (old.get('titleId')==new.get('titleId')==TITLE and
+            old.get('contentId')==new.get('contentId') and
+            len(old_parts)==len(new_parts)==3 and
+            new_parts>=old_parts and old==new)
+
+
+def parse_eboot_report(output):
+    """Read the fixed-format on-console eboot hash helper output."""
+    report={}
+    for line in output.splitlines():
+        match=re.fullmatch(r'NUVIO eboot (installed|backup|stage) bytes=(\d+) sha256=([0-9a-f]{64})',line)
+        if match:
+            report[match[1]]=(int(match[2]),match[3])
+        elif line=='NUVIO eboot stage=absent':
+            report['stage']=None
+    if 'installed' not in report or 'backup' not in report or 'stage' not in report:
+        raise RuntimeError('Console eboot helper returned incomplete evidence')
+    return report
 
 
 def main():
@@ -32,11 +65,14 @@ def main():
         if rel.is_absolute() or '..' in rel.parts or not p.is_relative_to(dist.resolve()) or hashlib.sha256(p.read_bytes()).hexdigest()!=want:
             raise RuntimeError('Local receipt mismatch')
         if want!=old['files'].get(name): changed.append(name)
-    allowed={'eboot.bin','sce_sys/icon0.png','sce_sys/pic0.png','sce_sys/pic1.png','assets/rml/nuvio.rml','assets/icons/nuvio-wordmark.png'}
+    allowed={'eboot.bin','sce_sys/icon0.png','sce_sys/pic0.png','sce_sys/pic1.png','sce_sys/param.json','assets/rml/nuvio.rml','assets/icons/nuvio-wordmark.png'}
     # The browser UI now ships inside the title folder and is served from the
     # console by the boot payload, so a UI update replaces webui/ as one unit.
     if any(n not in allowed and not n.startswith('webui/') for n in changed):
         raise RuntimeError('Changes exceed reviewed native/UI asset allowlist')
+    if 'close.elf' in new.get('helpers', {}):
+        import close
+        close.main(args.host)
     info_text=helper(2,args.host)
     lines=[l for l in info_text.splitlines() if l.startswith('{')]
     info=json.loads(lines[-1]) if lines else {}
@@ -47,11 +83,10 @@ def main():
         def read(path):
             out=io.BytesIO();ftp.retrbinary('RETR '+path,out.write);return out.getvalue()
         def write(path,data):
-            temp=path+'.nuvio-update'
-            try: ftp.size(temp)
-            except ftplib.error_perm as exc:
-                if not str(exc).startswith('550'):raise
-            else:raise RuntimeError('Staging path already exists')
+            # The console FTP server reports SIZE as 18446744073709551615 for
+            # both existing and missing paths. Use a unique staging name and
+            # verify its contents before the atomic rename.
+            temp=path+'.nuvio-update-'+uuid.uuid4().hex
             ftp.storbinary('STOR '+temp,io.BytesIO(data))
             if hashlib.sha256(read(temp)).digest()!=hashlib.sha256(data).digest():raise RuntimeError('Console staging verification failed')
             ftp.rename(temp,path)
@@ -101,6 +136,11 @@ def main():
         originals={}
         for name in changed:
             remote='/data/homebrew/'+TITLE+'/'+name
+            if name=='eboot.bin':
+                # SDK ftpsrv transforms PS5 containers on RETR. The console
+                # helper below verifies the raw installed and staged bytes.
+                originals[name]=None
+                continue
             try:before=read(remote)
             except ftplib.error_perm as exc:
                 if not str(exc).startswith('550') or name in old['files']:raise
@@ -109,9 +149,37 @@ def main():
                 if before is None or hashlib.sha256(before).hexdigest()!=old['files'][name]:raise RuntimeError('Installed predecessor mismatch: '+name)
             elif before is not None:raise RuntimeError('Unexpected pre-existing asset: '+name)
             originals[name]=before
+        if 'sce_sys/param.json' in changed and not safe_param_update(
+                originals['sce_sys/param.json'], (dist/'sce_sys/param.json').read_bytes()):
+            raise RuntimeError('Refusing title metadata change beyond contentVersion')
+        eboot_before=None
+        if 'eboot.bin' in changed:
+            eboot_before=parse_eboot_report(helper(5,args.host))
+            expected_old=old['files'].get('eboot.bin')
+            if (eboot_before['installed'] is None or
+                    eboot_before['installed'][1]!=expected_old or
+                    eboot_before['backup'][1]!=expected_old or
+                    eboot_before['stage'] is not None):
+                raise RuntimeError('Console eboot or rollback backup does not match the installed receipt')
         for name in changed:
             remote='/data/homebrew/'+TITLE+'/'+name
             before=originals[name]
+            if name=='eboot.bin':
+                stage=remote+'.nuvio-update'
+                ftp.storbinary('STOR '+stage,io.BytesIO((dist/name).read_bytes()))
+                staged=parse_eboot_report(helper(5,args.host))
+                if (staged['installed']!=eboot_before['installed'] or
+                        staged['backup']!=eboot_before['backup'] or
+                        staged['stage']!=(len((dist/name).read_bytes()),new['files'][name])):
+                    raise RuntimeError('Console eboot stage hash did not match the local receipt')
+                ftp.rename(stage,remote)
+                ftp.sendcmd('SITE CHMOD 755 '+remote)
+                installed=parse_eboot_report(helper(5,args.host))
+                if (installed['installed']!=(len((dist/name).read_bytes()),new['files'][name]) or
+                        installed['backup']!=installed['installed'] or installed['stage'] is not None):
+                    raise RuntimeError('Installed eboot hash does not match the local receipt')
+                print('Verified and replaced',name,'sha256',new['files'][name])
+                continue
             if before is not None:
                 backup='/data/homebrew/ps5-homebrew-dev/nuvio-'+hashlib.sha256(before).hexdigest()+'-'+name.replace('/','_')
                 ftp.storbinary('STOR '+backup,io.BytesIO(before))

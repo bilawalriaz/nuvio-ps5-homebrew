@@ -83,6 +83,7 @@ artifacts. It does not certify console execution. The builder leaves
 | `build/control-2.elf` | Title information helper |
 | `build/control-3.elf` | Launch helper |
 | `build/control-4.elf` | Staged runtime hash helper |
+| `build/control-5.elf` | On-console eboot hash and rollback-copy helper |
 | `build/nuvio.elf` | Single boot payload: privileges and the console UI server |
 | `build/promote.elf` | One-time Nuvio permission helper |
 | `build/build.json` | Native file, helper and input hashes |
@@ -93,6 +94,21 @@ browser UI under `webui/`. `nuvio.elf` serves that folder from the console, so i
 needs no network host. Keep the ELF section headers intact and do not strip the
 payload or helper ELFs. The loader reads the section headers to size each
 transfer.
+
+## Build the permission diagnostic
+
+Use a dedicated directory for the signing-profile experiment:
+
+```sh
+NUVIO_WORK_DIR=/tmp/nuvio-sdk-auth \
+NUVIO_UNPROMOTED_LOOPBACK_DIAGNOSTIC=1 \
+python3 scripts/build.py --auth-profile sdk-install-app
+```
+
+This uses the exact signing metadata from the pinned SDK's install-app example.
+The receipt records the profile and its source hash.
+The default build keeps EVO's existing signing profile.
+Use [Validation](VALIDATION.md#unpromoted-loopback-diagnostic) for the console test.
 
 ## Build only the UI
 
@@ -148,3 +164,34 @@ import table. Under a UTF-8 collation `libkernel.so` sorts after
 `libkernel_web.so`, so the title imports `libkernel_web.prx` instead of
 `libkernel.prx`. Builds from 2026-10-03 did that and the console refused to start
 them. The same source built under C collation imports `libkernel.prx`.
+
+## Title-local UI build
+
+Build the packaged UI responder with:
+
+```sh
+NUVIO_WORK_DIR=/tmp/nuvio-title-ui python3 scripts/build.py --title-ui
+```
+
+This variant serves `/data/homebrew/PPSA99997/webui` through EVO's existing
+browser listener and injects the existing Nuvio bridge into HTML entry pages.
+It sets the default Nuvio provider address without reading a helper-generated
+configuration file. Existing configuration remains the browser storage key.
+The build receipt records `ui_hosting: title`. `make build` selects this variant with embedded promotion.
+
+Use `--auth-profile sdk-install-app` separately to compare the SDK example's
+signing metadata. Keep the default-profile diagnostic as the comparison.
+
+## Embedded promotion
+
+Build with the configured ELF-loader port:
+
+```sh
+NUVIO_WORK_DIR=/tmp/nuvio-bootstrap python3 scripts/build.py --title-ui --auto-bootstrap 9021
+```
+
+The title embeds the fixed Nuvio promotion ELF and sends it to the existing
+loopback loader before starting its browser listener. The build requires an
+explicit loader port. The receipt records the embedded ELF hash and size.
+The transfer has a deadline and requires the promotion helper's verified response.
+Read [Validation](VALIDATION.md) for the current console result.

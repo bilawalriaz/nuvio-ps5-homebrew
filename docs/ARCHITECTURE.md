@@ -4,13 +4,14 @@
 
 [SOURCE-VERIFIED] The port uses the source revisions in [Sources](SOURCES.md).
 The console runs an EVO-derived native title with the identity `PPSA99997`. The
-browser UI travels inside the title folder, and the boot payload serves it over
-the console's loopback, so the app runs without a computer.
+browser UI travels inside the title folder. The title loads its embedded
+permission helper through the existing ELF loader and serves the UI over loopback.
 
 ```mermaid
 flowchart LR
-    Files[PS5: webui/ in the title folder] --> Server[PS5: nuvio.elf static server]
-    Server --> Proxy[PS5: EVO loopback proxy]
+    Loader[Existing ELF loader] --> Helper[Embedded one-shot permission helper]
+    Helper --> Proxy[PS5: title loopback listener]
+    Files[PS5: webui/ in the title folder] --> Proxy
     Proxy --> Browser[PS5 system browser: Nuvio UI]
     Browser --> Bridge[Stream and controller bridge]
     Bridge --> Player[Native EVO playback engine]
@@ -41,7 +42,7 @@ port never runs a browser inside the native decoder.
 | Playback overlays | Keep active playback screens visible | Preserve native controls and dialogs |
 | Route state | Enable the Nuvio resume methods for the PS5 flag | Keep browsing state across browser recreation |
 | Public login configuration | Read selected values from the official TV package | Enable the official QR login path |
-| Browser UI hosting | Serve `webui/` from the console payload over loopback | Remove the computer that served the UI |
+| Browser UI hosting | Serve `webui/` from the title over loopback | Remove the computer that served the UI |
 | Host build | Adapt the EVO packaging for macOS | Build without a Linux VM |
 
 `sce_sys/param.json` in this repository holds the title identity and content
@@ -118,6 +119,56 @@ because the title cannot bind its proxy until the payload grants the privilege.
 The payload watches once every quarter second, and the one-time helper `promote.elf`
 promotes once. Neither adds a new exploit or hypervisor access.
 
+### Unpromoted loopback diagnostic
+
+[SOURCE-VERIFIED] The pinned EVO proxy creates an IPv4 TCP socket, binds
+`127.0.0.1:8686`, then listens. The previous log combined bind and listen
+failures, so the build adapter now records socket, bind, listen and accepted
+browser connections separately.
+
+[SOURCE-VERIFIED] Nuvio's `sce_sys/param.json` has title identity and app
+attributes, but no inspected field that grants the proxy's missing network
+permission. The package adapter signs `eboot.elf` into `eboot.bin` and includes
+`sce_module/libc.prx`. It does not add a credential change or runtime launch
+argument. This inspection does not establish what firmware 13.60 grants a
+fake-signed title.
+
+[SOURCE-VERIFIED] The native import table includes `libSceNet.prx`,
+`libScePosixForWebKit.prx` and `libkernel.prx`. These imports identify linked
+interfaces. They do not show whether the title can bind a loopback socket.
+`param.json` requests the `launchActivity` intent, and the package script builds
+the app module directly. It does not supply a separate launch command or
+environment variables.
+
+[SOURCE-VERIFIED] The Stremio port at `a4b12fb515a3044f073f4befba0dd90d8244eddd`
+adapts socket `fcntl`, DNS lookup, thread stack size and `pipe`. Its packaging
+also sets memory fields in `param.json` and signs a native title. Those changes
+do not implement a listener or alter title credentials. Nuvio copies none of
+that code. The pin and archive hash are in [Sources](SOURCES.md).
+
+[UNKNOWN] An unpromoted Nuvio title has not yet demonstrated that it can bind
+and accept a loopback connection on firmware 13.60. See [Validation](VALIDATION.md)
+for the diagnostic build and console sequence. Keep the boot helper until that
+test passes.
+
+### Signing metadata experiment
+
+[SOURCE-VERIFIED] EVO's signer accepts `--authority` and `--auth-info`.
+The SDK v0.43 `samples/install_app/Makefile` provides both values for its sample.
+The build option `--auth-profile sdk-install-app` copies those exact values into
+the title's signed container and records their source hash in the receipt.
+It leaves the generated runtime unchanged.
+
+[SOURCE-VERIFIED] Inspected kstuff revision
+`d44a25400ecfab7e31afe9eb2c7c7c99770e8f56` reads embedded authentication info
+and uses it instead of its default executable profile.
+See [Sources](SOURCES.md) for the implementation reference.
+
+[INFERENCE] A title signing profile may remove the runtime promotion step.
+[UNKNOWN] The SDK profile's listener permission on firmware 13.60 still needs
+the unpromoted console test.
+The release packager rejects this experimental profile.
+
 ## Browser UI hosting
 
 The build copies the Nuvio bundle into `webui/` inside the title folder, so the
@@ -142,6 +193,10 @@ the process's main thread served every request.
 | `/data/nuvio/addons.json` | Native addon manifest list |
 | `/data/nuvio/evo.log` | Private native diagnostics |
 | `/data/homebrew/ps5-homebrew-dev` | Install staging and update backups |
+
+`control-5.elf` hashes the title's raw signed eboot on-console and writes an
+immutable backup named by that hash before an update. It also hashes the staged
+replacement. FTP `RETR` returns a transformed ELF for these PS5 containers.
 
 The runtime `libc.prx` comes from independently authored boilerplate in EVO, and
 the build does not extract Sony modules. etaHEN can stall when FTP downloads this

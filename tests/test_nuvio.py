@@ -149,6 +149,44 @@ int main(void) {
             subprocess.run([str(binary)],check=True,timeout=10)
 
 
+class LoopbackDiagnosticAdapterTests(unittest.TestCase):
+    def test_proxy_reports_each_socket_stage_and_browser_connection(self):
+        source = '''    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) { LOG("server: socket errno=%d", errno); return; }
+    if (bind(fd, (struct sockaddr *)&a, sizeof a) != 0 || listen(fd, 16) != 0) {
+        LOG("server: bind/listen 127.0.0.1:%d failed errno=%d", s_port, errno);
+        close(fd);
+        return;
+    }
+        int c = accept(s_listen_fd, NULL, NULL);
+        if (c >= 0 && s_srv_stop) { close(c); break; }'''
+        adapted = build.instrument_loopback_server(source)
+        for result in ('socket failed errno=%d', 'socket ok fd=%d',
+                       'bind failed port=%d errno=%d', 'bind ok 127.0.0.1:%d',
+                       'listen failed port=%d errno=%d', 'listen ok port=%d',
+                       'connection accepted'):
+            self.assertIn(result, adapted)
+
+    def test_proxy_diagnostic_refuses_moved_anchor(self):
+        with self.assertRaises(RuntimeError):
+            build.instrument_loopback_server('int fd = socket(AF_INET, SOCK_STREAM, 0);')
+
+    def test_unpromoted_diagnostic_bypasses_only_the_missing_origin_preflight(self):
+        source = '''    case P_CHECK:
+        if (s_check_rc == 0) return;
+        if (s_check_rc < 0) {
+            char m[256];
+'''
+        adapted = build.bypass_loopback_origin_preflight(source)
+        self.assertIn('preflight bypassed for unpromoted loopback diagnostic', adapted)
+        self.assertNotIn('#ifdef NUVIO_UNPROMOTED_LOOPBACK_DIAGNOSTIC', adapted)
+        self.assertIn('if (s_check_rc < 0) {\n            char m[256];', adapted)
+
+    def test_unpromoted_diagnostic_refuses_moved_preflight_anchor(self):
+        with self.assertRaises(RuntimeError):
+            build.bypass_loopback_origin_preflight('case P_CHECK: break;')
+
+
 class ControlEvidenceTests(unittest.TestCase):
     def test_upload_success_does_not_mask_launch_refusal(self):
         import contextlib
@@ -169,6 +207,52 @@ class ControlEvidenceTests(unittest.TestCase):
         result=types.SimpleNamespace(returncode=0,stdout='NUVIO launch_result=0x8018',stderr='')
         with patch.object(installer.subprocess,'run',return_value=result),contextlib.redirect_stdout(io.StringIO()):
             self.assertIn('0x8018',installer.helper(3,'fixture.invalid'))
+        result=types.SimpleNamespace(returncode=0,stdout='NUVIO eboot stage=absent',stderr='')
+        with patch.dict(installer.os.environ,{'PS5_READ_IDLE_TIMEOUT':'3'}), \
+             patch.object(installer.subprocess,'run',return_value=result) as run, \
+             contextlib.redirect_stdout(io.StringIO()):
+            installer.helper(5,'fixture.invalid')
+            self.assertEqual(run.call_args.kwargs['env']['PS5_READ_IDLE_TIMEOUT'],'60.0')
+            self.assertGreater(run.call_args.kwargs['timeout'],60+5+30+10)
+        with patch.dict(installer.os.environ,{'PS5_READ_IDLE_TIMEOUT':'120'}), \
+             patch.object(installer.subprocess,'run',return_value=result) as run, \
+             contextlib.redirect_stdout(io.StringIO()):
+            installer.helper(5,'fixture.invalid')
+            self.assertEqual(run.call_args.kwargs['env']['PS5_READ_IDLE_TIMEOUT'],'120.0')
+            self.assertGreater(run.call_args.kwargs['timeout'],120+5+30+10)
+
+
+class UpdateMetadataTests(unittest.TestCase):
+    def test_update_allows_only_a_content_version_bump(self):
+        import json
+        import update
+        before={'titleId':'PPSA99997','contentId':'UP9000-PPSA99997_00-NUVIOPS500000000',
+                'contentVersion':'01.000.001','localizedParameters':{'en-US':{'titleName':'Nuvio'}}}
+        after={**before,'contentVersion':'01.000.002'}
+        self.assertTrue(update.safe_param_update(json.dumps(before).encode(),
+                                                 json.dumps(after).encode()))
+        for change in ({'titleId':'PPSA11111'},
+                       {'contentId':'UP9000-PPSA11111_00-NUVIOPS500000000'},
+                       {'localizedParameters':{'en-US':{'titleName':'Other'}}},
+                       {'contentVersion':'01.000.000'}):
+            self.assertFalse(update.safe_param_update(json.dumps(before).encode(),
+                                                      json.dumps({**before,**change}).encode()))
+
+    def test_console_eboot_report_requires_installed_backup_and_stage(self):
+        import update
+        installed='a'*64
+        backup='a'*64
+        stage='b'*64
+        output=(f'NUVIO eboot installed bytes=100 sha256={installed}\n'
+                f'NUVIO eboot backup bytes=100 sha256={backup}\n'
+                f'NUVIO eboot stage bytes=101 sha256={stage}\n')
+        self.assertEqual(update.parse_eboot_report(output), {
+            'installed':(100,installed),'backup':(100,backup),'stage':(101,stage)})
+        absent=output.replace(f'NUVIO eboot stage bytes=101 sha256={stage}',
+                              'NUVIO eboot stage=absent')
+        self.assertIsNone(update.parse_eboot_report(absent)['stage'])
+        with self.assertRaises(RuntimeError):
+            update.parse_eboot_report('NUVIO eboot installed=unknown')
 
 
 class RouteResumeTests(unittest.TestCase):
@@ -324,4 +408,3 @@ int main(int argc, char **argv) {
             finally:
                 server.terminate()
                 server.wait(timeout=5)
-

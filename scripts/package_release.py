@@ -28,6 +28,10 @@ HELPER_INFO = {
         'Launches the Nuvio folder title when it is installed and no other app runs.'),
     'control-4.elf': ('Nuvio runtime hash',
         'Hashes the staged libc.prx runtime on the console.'),
+    'close.elf': ('Nuvio close title',
+        'Closes the running Nuvio title for development and recovery.'),
+    'control-5.elf': ('Nuvio eboot verification',
+        'Hashes and preserves the installed eboot on the console, then checks a staged replacement.'),
 }
 
 # Only one payload is advertised. The control and promote helpers are build and
@@ -36,7 +40,9 @@ PUBLIC_HELPERS = ['nuvio.elf']
 
 
 def helper_inventory(receipt):
-    expected = {f'control-{i}.elf' for i in (1, 2, 3, 4)} | {'promote.elf', 'nuvio.elf'}
+    expected = {f'control-{i}.elf' for i in (1, 2, 3, 4, 5)} | {'promote.elf', 'nuvio.elf'}
+    if 'close.elf' in receipt['helpers']:
+        expected.add('close.elf')
     if set(receipt['helpers']) != expected:
         raise RuntimeError('Unexpected helper inventory')
     for name in sorted(expected):
@@ -129,6 +135,13 @@ def main():
     receipt = json.loads((WORK / 'build.json').read_text())
     if receipt['title_id'] != TITLE:
         raise RuntimeError('Wrong title')
+    if receipt.get('diagnostic_mode'):
+        raise RuntimeError('Diagnostic builds cannot be packaged as releases')
+    if receipt.get('auth_profile', 'default') != 'default':
+        raise RuntimeError('Permission-test signing profiles cannot be packaged as releases')
+    single_install = receipt.get('ui_hosting') == 'title'
+    if single_install and not receipt.get('automatic_bootstrap'):
+        raise RuntimeError('Title-local releases require embedded promotion')
     pin = next(p for p in json.loads((ROOT / 'deps.lock').read_text())['artifacts'] if p['id'] == 'evo-player-nuvio-source')
     dist = WORK / pin['directory'] / 'output/app' / TITLE
     helpers = helper_inventory(receipt)
@@ -147,20 +160,22 @@ def main():
     helper_dir.mkdir(exist_ok=True)
     for name in helpers:
         (helper_dir / name).write_bytes((WORK / name).read_bytes())
-    # One advertised payload at the release root. The store's Payload Manager
-    # source should not ask a user to choose between six helpers.
-    payload_asset = out / 'nuvio.elf'
-    payload_asset.write_bytes((WORK / 'nuvio.elf').read_bytes())
-    assets.append(payload_asset)
-    payloads = out / 'payloads.json'
-    write_payloads_json(version, tag, args.repo, PUBLIC_HELPERS, payloads)
-    assets.append(payloads)
+    if not single_install:
+        # One advertised payload at the release root. The store's Payload Manager
+        # source should not ask a user to choose between six helpers.
+        payload_asset = out / 'nuvio.elf'
+        payload_asset.write_bytes((WORK / 'nuvio.elf').read_bytes())
+        assets.append(payload_asset)
+        payloads = out / 'payloads.json'
+        write_payloads_json(version, tag, args.repo, PUBLIC_HELPERS, payloads)
+        assets.append(payloads)
     (out / 'SHA256SUMS').write_text(''.join(digest(p) + '  ' + p.name + '\n' for p in assets))
     assets.append(out / 'SHA256SUMS')
     (out / 'ASSETS').write_text(''.join(str(p.relative_to(ROOT)) + '\n' for p in assets))
     print('Store artifact:', store, digest(store))
     print('Package:', full, digest(full))
-    print('Payload source:', payloads, 'tag', tag)
+    if not single_install:
+        print('Payload source:', payloads, 'tag', tag)
 
 
 if __name__ == '__main__':

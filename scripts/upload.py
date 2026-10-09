@@ -8,15 +8,18 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--host',default=os.environ.get('PS5_HOST'))
     ap.add_argument('--port',type=int,default=int(os.environ.get('PS5_ELF_PORT','9021')))
+    ap.add_argument('--idle-timeout',type=float,default=float(os.environ.get('PS5_READ_IDLE_TIMEOUT','3')),
+                    help='Seconds to wait for helper output between reads (default: PS5_READ_IDLE_TIMEOUT or 3)')
     ap.add_argument('--file',type=Path,required=True)
     args=ap.parse_args()
     if not args.host or not 0<args.port<65536:ap.error('Supply the console host and valid loader port')
+    if args.idle_timeout<=0:ap.error('--idle-timeout must be positive')
     elfcheck.validate(str(args.file));payload=args.file.read_bytes()
     print('ELF sha256',hashlib.sha256(payload).hexdigest(),flush=True)
     with socket.create_connection((args.host,args.port),timeout=10) as sock:
         sock.settimeout(30);sock.sendall(payload)
         print('Transferred',len(payload),'bytes; execution needs a response or console evidence',flush=True)
-        sock.settimeout(3);deadline=time.monotonic()+35;total=0
+        sock.settimeout(args.idle_timeout);deadline=time.monotonic()+max(35,args.idle_timeout+5);total=0
         while time.monotonic()<deadline:
             try:data=sock.recv(65536)
             except socket.timeout:break

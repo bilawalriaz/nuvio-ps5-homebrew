@@ -42,6 +42,109 @@ int main(void) {
     for(size_t i=0;i<sizeof(digest);i++) printf("%02x",digest[i]);
     puts(""); return 0;
 }
+#elif AURORA_CONTROL_ACTION == 5
+#include <fcntl.h>
+#include <inttypes.h>
+#include "../../payloads/common/sha256.h"
+
+static int hash_fd(int fd, uint8_t digest[SHA256_DIGEST_SIZE], uint64_t *total) {
+    sha256_ctx hash;
+    uint8_t bytes[16384];
+    sha256_init(&hash); *total=0;
+    for(;;) {
+        ssize_t n=read(fd,bytes,sizeof(bytes));
+        if(n<0 && errno==EINTR) continue;
+        if(n<0) return -1;
+        if(n==0) break;
+        if(*total>UINT64_MAX-(uint64_t)n) { errno=EOVERFLOW; return -1; }
+        *total+=(uint64_t)n;
+        sha256_update(&hash,bytes,(size_t)n);
+    }
+    sha256_final(&hash,digest); return 0;
+}
+
+static void report(const char *kind, uint64_t bytes,
+                   const uint8_t digest[SHA256_DIGEST_SIZE]) {
+    printf("NUVIO eboot %s bytes=%" PRIu64 " sha256=",kind,bytes);
+    for(size_t i=0;i<SHA256_DIGEST_SIZE;i++) printf("%02x",digest[i]);
+    puts("");
+}
+
+int main(void) {
+    int installed=open("/data/homebrew/PPSA99997/eboot.bin",O_RDONLY|O_NOFOLLOW);
+    if(installed<0) { perror("installed eboot"); return 1; }
+    uint8_t installed_hash[SHA256_DIGEST_SIZE], backup_hash[SHA256_DIGEST_SIZE];
+    uint64_t installed_size=0, backup_size=0;
+    if(hash_fd(installed,installed_hash,&installed_size)!=0 || installed_size==0 ||
+       installed_size>134217728u || lseek(installed,0,SEEK_SET)<0) {
+        perror("hash installed eboot"); close(installed); return 1;
+    }
+    report("installed",installed_size,installed_hash);
+
+    char backup_name[96];
+    int n=snprintf(backup_name,sizeof(backup_name),"nuvio-eboot-backup-");
+    if(n<0 || (size_t)n>=sizeof(backup_name)) { close(installed); return 1; }
+    size_t used=(size_t)n;
+    for(size_t i=0;i<SHA256_DIGEST_SIZE;i++) {
+        n=snprintf(backup_name+used,sizeof(backup_name)-used,"%02x",installed_hash[i]);
+        if(n!=2) { close(installed); return 1; }
+        used+=2;
+    }
+    if(used+5>=sizeof(backup_name)) { close(installed); return 1; }
+    memcpy(backup_name+used,".bin",5);
+    char backup_path[160];
+    n=snprintf(backup_path,sizeof(backup_path),"/data/homebrew/ps5-homebrew-dev/%s",backup_name);
+    if(n<0 || (size_t)n>=sizeof(backup_path)) { close(installed); return 1; }
+    int backup=open(backup_path,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
+    if(backup>=0) {
+        uint8_t bytes[16384];
+        for(;;) {
+            ssize_t amount=read(installed,bytes,sizeof(bytes));
+            if(amount<0 && errno==EINTR) continue;
+            if(amount<0) { perror("read eboot backup source"); close(backup); close(installed); return 1; }
+            if(amount==0) break;
+            size_t sent=0;
+            while(sent<(size_t)amount) {
+                ssize_t written=write(backup,bytes+sent,(size_t)amount-sent);
+                if(written<0 && errno==EINTR) continue;
+                if(written<=0) { perror("write eboot backup"); close(backup); close(installed); return 1; }
+                sent+=(size_t)written;
+            }
+        }
+        if(fsync(backup)!=0 || close(backup)!=0) { perror("finish eboot backup"); close(installed); return 1; }
+    } else if(errno!=EEXIST) {
+        perror("create eboot backup"); close(installed); return 1;
+    }
+    int backup_read=open(backup_path,O_RDONLY|O_NOFOLLOW);
+    if(backup_read<0) {
+        perror("open eboot backup"); close(installed); return 1;
+    }
+    int backup_result=hash_fd(backup_read,backup_hash,&backup_size);
+    int backup_close=close(backup_read);
+    if(backup_result!=0 || backup_close!=0 || backup_size!=installed_size ||
+       memcmp(installed_hash,backup_hash,sizeof(installed_hash))!=0) {
+        perror("verify eboot backup"); close(installed); return 1;
+    }
+    report("backup",backup_size,backup_hash);
+    printf("NUVIO eboot backup_path=/data/homebrew/ps5-homebrew-dev/%s\n",backup_name);
+
+    int staged=open("/data/homebrew/PPSA99997/eboot.bin.nuvio-update",O_RDONLY|O_NOFOLLOW);
+    if(staged<0 && errno==ENOENT) {
+        puts("NUVIO eboot stage=absent");
+    } else if(staged<0) {
+        perror("staged eboot"); close(installed); return 1;
+    } else {
+        uint8_t stage_hash[SHA256_DIGEST_SIZE]; uint64_t stage_size=0;
+        int result=hash_fd(staged,stage_hash,&stage_size);
+        int close_result=close(staged);
+        if(result!=0 || close_result!=0 || stage_size==0 || stage_size>134217728u) {
+            perror("hash staged eboot"); close(installed); return 1;
+        }
+        report("stage",stage_size,stage_hash);
+    }
+    close(installed);
+    return 0;
+}
 #elif AURORA_CONTROL_ACTION == 3
 /* Layout and zero-initialized fields follow the upstream hbldr example. */
 typedef struct { uint32_t structsize,user_id,app_opt; uint64_t crash_report;

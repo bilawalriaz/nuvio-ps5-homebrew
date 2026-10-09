@@ -55,6 +55,22 @@
       "evidence": "[SOURCE-VERIFIED] Inspected pinned source; checksum recorded locally. Not firmware validation."
     },
     {
+      "id": "stremio-ps5-network-reference",
+      "kind": "source-archive",
+      "role": "Read-only comparison for sandbox socket adaptations; no code copied into Nuvio.",
+      "url": "https://codeload.github.com/Sp9nky/unofficial-stremio-ps5-port/tar.gz/a4b12fb515a3044f073f4befba0dd90d8244eddd",
+      "commit": "a4b12fb515a3044f073f4befba0dd90d8244eddd",
+      "sha256": "cb96b817c7c5723f09b1b22c8f3204c3414d3488302f726d17050cb05e08af46",
+      "size_bytes": 11437406,
+      "cache_file": "stremio-ps5-network-reference.tar.gz",
+      "retrieved": "2026-10-08",
+      "license": "GPL-3.0-or-later",
+      "evidence": "[SOURCE-VERIFIED] Archive checksum recorded locally; inspected native/console_curl.c, native/posix_fixes.c, gl/build.sh and app/sce_sys/param.json.",
+      "notes": [
+        "The inspected socket changes cover curl fcntl, resolver, thread stacks and pipe fallback. They do not grant title credentials or implement a loopback listener."
+      ]
+    },
+    {
       "id": "nuvio-pacbrew",
       "kind": "release-archive",
       "role": "Optional Nuvio target library prefix; host tools and SDK are not taken from this archive.",

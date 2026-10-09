@@ -49,6 +49,19 @@
   *      emby.conf" would have this code write a downloaded file over stored
   *      credentials. evo_bundle_path() is the only way to turn a bundle-relative
   *      name into a real path and it refuses anything that could leave the
+--- a/projects/evoplayer/addons/src/provider_nuvio.c
++++ b/projects/evoplayer/addons/src/provider_nuvio.c
+@@ -29,8 +29,8 @@
+ 
+ static int nv_init(void)
+ {
+-    g_host[0] = '\0';
+-    g_port = NUVIO_DEFAULT_PORT;
++    snprintf(g_host, sizeof g_host, "127.0.0.1");
++    g_port = 4173;
+     g_https = 0;
+ 
+     FILE *f = fopen(evo_data_path(NUVIO_CONF), "r");
 --- a/projects/evoplayer/addons/src/provider_stremio.c
 +++ b/projects/evoplayer/addons/src/provider_stremio.c
 @@ -13,7 +13,7 @@
@@ -383,7 +396,16 @@
  
 --- a/projects/evoplayer/src/evo_webui.c
 +++ b/projects/evoplayer/src/evo_webui.c
-@@ -141,7 +141,7 @@
+@@ -62,6 +62,8 @@
+ #include <openssl/ssl.h>
+ 
+ #include "evo_webui.h"
++#include "bootstrap.h"
++#include "local_ui.h"
+ #include "evo_boot_trace.h"
+ #include "evo_provider.h"     /* evo_provider_parse_web_source */
+ #include "evo_data_path.h"    /* evo_data_path, evo_mkdir - the saved page storage */
+@@ -141,7 +143,7 @@
  } probe_layout_t;
  
  static const probe_layout_t k_layouts[] = {
@@ -392,7 +414,7 @@
      { "2: beside the rail, parts=0x7 control=0",    2, 108,  0, 1812, 1080, 0x7, 0x0 },
      { "3: inset card, parts=0 control=0x1",         2, 148, 40, 1732, 1000, 0x0, 0x1 },
      { "4: inset card, parts=0xFF control=0xFF",     2, 148, 40, 1732, 1000, 0xFF, 0xFF },
-@@ -179,6 +179,7 @@
+@@ -179,6 +181,7 @@
  static int  s_hold_frames = 25 * 60;
  
  static char s_url[1024];
@@ -400,7 +422,7 @@
  static char s_hook_profile[16];      /* "" = media server, "nuvio" */
  static char s_open_url[2048];        /* what the dialog opens first */
  static char s_reopen_url[2048];      /* where it reopens after playback */
-@@ -532,7 +533,7 @@
+@@ -532,7 +535,7 @@
   * panicked the console. Re-added on a timer in case the site rebuilds the
   * page body. */
  "function addClose(){if(!document.body||document.getElementById('__evoClose'))return;"
@@ -409,7 +431,7 @@
  " b.setAttribute('style','position:fixed;right:28px;bottom:28px;z-index:2147483647;padding:14px 30px;"
  "border-radius:30px;background:rgba(0,0,0,.75);color:#fff;font:24px sans-serif;cursor:pointer;"
  "border:2px solid rgba(255,255,255,.55)');"
-@@ -814,6 +815,7 @@
+@@ -814,6 +817,7 @@
          tlog("close requested by the page");
          pthread_mutex_lock(&s_mx);
          s_close_req = 1;
@@ -417,7 +439,71 @@
          pthread_mutex_unlock(&s_mx);
          respond(fd, "204 No Content", "text/plain", "", 0);
      } else if (!strncmp(path, "/evo/log", 8)) {
-@@ -1229,6 +1231,7 @@
+@@ -1126,7 +1130,13 @@
+             serve_storage(fd, method, req, got, hl);
+         else if (!strncmp(path, "/evo/", 5) || !s_up.enabled)
+             serve_evo(fd, path);
+-        else
++        else if (!strcmp(s_hook_profile, "nuvio")) {
++            char tag[96];
++            size_t tag_len = is_html_entry(path) ? hook_tag(tag, sizeof tag) : 0;
++            int status = nuvio_local_ui_send(fd,
++                "/data/homebrew/PPSA99997/webui", method, path, tag, tag_len);
++            LOG("title-ui: response status=%d", status);
++        } else
+             proxy_request(fd, req, got, hl, method, path);
+     }
+     free(req);
+@@ -1140,6 +1150,7 @@
+     while (!s_srv_stop) {
+         int c = accept(s_listen_fd, NULL, NULL);
+         if (c >= 0 && s_srv_stop) { close(c); break; }
++        if (c >= 0) LOG("server: connection accepted");
+         if (c < 0) {
+             if (s_srv_stop) break;
+             if (errno == EINTR) continue;
+@@ -1161,8 +1172,16 @@
+ static void server_start(void)
+ {
+     if (s_listen_fd >= 0) return;
++    if (!strcmp(s_hook_profile, "nuvio")) {
++        LOG("bootstrap: promotion requested");
++        int rc = nuvio_bootstrap();
++        if (rc == 0) LOG("bootstrap: promotion verified errno=0");
++        else LOG("bootstrap: promotion failed stage=%s errno=%d", nuvio_bootstrap_stage(), errno);
++        if (rc != 0) return;
++    }
+     int fd = socket(AF_INET, SOCK_STREAM, 0);
+-    if (fd < 0) { LOG("server: socket errno=%d", errno); return; }
++    if (fd < 0) { LOG("server: socket failed errno=%d", errno); return; }
++    LOG("server: socket ok fd=%d", fd);
+     int one = 1;
+     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+     struct sockaddr_in a;
+@@ -1170,11 +1189,20 @@
+     a.sin_family = AF_INET;
+     a.sin_port = htons((uint16_t)s_port);
+     a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+-    if (bind(fd, (struct sockaddr *)&a, sizeof a) != 0 || listen(fd, 16) != 0) {
+-        LOG("server: bind/listen 127.0.0.1:%d failed errno=%d", s_port, errno);
++    if (bind(fd, (struct sockaddr *)&a, sizeof a) != 0) {
++        int error = errno;
++        LOG("server: bind failed port=%d errno=%d", s_port, error);
+         close(fd);
+         return;
+     }
++    LOG("server: bind ok 127.0.0.1:%d", s_port);
++    if (listen(fd, 16) != 0) {
++        int error = errno;
++        LOG("server: listen failed port=%d errno=%d", s_port, error);
++        close(fd);
++        return;
++    }
++    LOG("server: listen ok port=%d", s_port);
+     s_listen_fd = fd;
+     s_srv_stop = 0;
+     pthread_t t;
+@@ -1229,6 +1257,7 @@
      pthread_mutex_lock(&s_mx);
      s_close_req = 0;                     /* nothing stale from a previous page */
      s_hook_seen = 0;
@@ -425,7 +511,7 @@
      s_entry_failed = 0;
      s_handoff_ready = 0;
      pthread_mutex_unlock(&s_mx);
-@@ -1253,6 +1256,7 @@
+@@ -1253,6 +1282,7 @@
          s_param.header_y     = L->y;
          LOG("layout %s", L->name);
      }
@@ -433,7 +519,23 @@
      LOG("Open url=%s ...", url);
      int rc = sceWebBrowserDialogOpen(&s_param);
      LOG("sceWebBrowserDialogOpen -> 0x%08x", (unsigned)rc);
-@@ -1547,3 +1551,10 @@
+@@ -1401,6 +1431,15 @@
+     LOG("open: %s via %s hook=%s", s_open_url, s_up.base,
+         s_hook_profile[0] ? s_hook_profile : "media-server");
+     s_error_pending = 0;
++    /* Packaged Nuvio files need no second HTTP process. Keep the
++     * configured origin as the browser-storage key for existing profiles. */
++    if (!strcmp(s_hook_profile, "nuvio")) {
++        s_check_rc = 1;
++        s_state = P_CHECK;
++        s_frames = 0;
++        LOG("title-ui: packaged assets selected");
++        return 0;
++    }
+     s_check_rc = 0;
+     pthread_t t;
+     pthread_attr_t at;
+@@ -1547,3 +1586,10 @@
  #else
  typedef int evo_webui_not_built; /* keep the TU non-empty */
  #endif /* EVO_APP_MODULE */

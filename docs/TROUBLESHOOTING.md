@@ -1,5 +1,13 @@
 # Troubleshooting
 
+## Stuck on “Opening Nuvio”
+
+Check the current boot's jailbreak, ShadowMount and ELF loader on port 9021.
+Check that `/data/homebrew/PPSA99997/webui/` exists.
+The single-install title loads its helper automatically and serves the page itself.
+Release 0.1.0-alpha.2 needs its separate `nuvio.elf` boot payload.
+Collect a private copy of `/data/nuvio/evo.log` if the splash remains.
+
 ## Collect evidence first
 
 Record the exact visible error and the installed eboot hash. Record whether the
@@ -18,11 +26,11 @@ answered, but the loopback listener returned `errno=13`. The payload privilege
 grant resolves that failure. The error code on its own does not identify a DNS or
 TLS problem.
 
-1. Check that `nuvio.elf` runs for this boot and prints the `serving` line.
+1. Check that the current boot's ELF loader listens on port 9021.
 2. Check the UI origin in `/data/nuvio/nuvio.conf` (default `127.0.0.1`).
 3. Check for a listener failure in a private native log.
 4. Check that the title folder carries `webui/`.
-5. Push the payload after a fresh jailbreak and wait for the ready message.
+5. Close and reopen Nuvio after the loader starts.
 
 Use the [startup procedure](OPERATIONS.md#start-after-a-reboot) after a reboot.
 
@@ -93,6 +101,7 @@ output. If the console rebooted, run the fresh-boot procedure.
 |---|---|
 | `mounted:true` | Close the title through the app switcher. Check `control-2` again. |
 | Installed predecessor mismatch | Compare the console files with the receipt for the actual installed build. |
+| Eboot receipt mismatch | Run `control-5.elf` and compare its on-console raw hash with the installed receipt. FTP `RETR` transforms PS5 containers. |
 | Local receipt mismatch | Restore matching candidate files or build a new candidate. |
 | Staging path already exists | Inspect the interrupted stage before you replace or remove it. |
 | Changes exceed the allowlist | Prepare a reviewed migration for those files. |
@@ -117,9 +126,11 @@ interruption can leave old, new and staged files together.
 8. Restore the intended file set through FTP.
 9. Check every restored hash before launch.
 
-The updater names each backup with the previous hash and the flattened relative
-path. An eboot backup ends in `-eboot.bin`, and a staged replacement ends in
-`.nuvio-update`. All app backups stay below `/data/homebrew/ps5-homebrew-dev`.
+The updater names ordinary-file backups with the previous hash and the flattened
+relative path. `control-5.elf` stores raw eboot backups as
+`nuvio-eboot-backup-<sha256>.bin` below `/data/homebrew/ps5-homebrew-dev`. Do not
+verify or restore these container files with FTP `RETR`. Use on-console hashing
+and rename the matching backup back to `/data/homebrew/PPSA99997/eboot.bin`.
 
 Restore only files that the matching receipts list, and keep `/data/nuvio` with
 its private account state. Do not replace the runtime to diagnose an eboot

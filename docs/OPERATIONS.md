@@ -31,61 +31,16 @@ The FTP scripts log in as `anonymous` by default. Set `PS5_FTP_USER` and
 
 ## Serve the UI during development
 
-The shipped app serves its own interface from the title folder. Nothing on the
-network has to run. Use `scripts/serve.py` only while iterating on the browser
-bundle, so a UI change does not need a push to the console:
-
-```sh
-python3 scripts/serve.py \
-  --host "<computer-lan-address>" \
-  --origin "http://<computer-lan-address>:4173" \
-  --test-clip
-```
-
-Keep the terminal open while you use that origin. The server publishes `build/ui`
-and the generated test addon. It never publishes the repository or the native
-title directory. Point `/data/nuvio/nuvio.conf` at that origin to use it. The
-default origin in [Change the UI origin](#change-the-ui-origin) uses the console
-server instead.
-
-`--test-clip` writes a 15 second test video when the clip is absent. It needs
-host FFmpeg. Omit the flag if you do not want the clip. For another port, pass
-`--port` and use the same port inside `--origin`.
-
-Check the host page:
-
-```sh
-curl --fail "http://<computer-lan-address>:4173/" -o /dev/null
-```
-
-A successful request proves the HTTP server answers on the computer. It does not
-prove that the console reaches the server.
+Use `scripts/serve.py` to preview the browser bundle on your computer.
+The title-local build reads its installed `webui/` folder on the PS5.
+Use the verified updater to install browser changes for console testing.
 
 ## Install from the release archive
 
-1. Download and unpack `nuvio-ps5-<version>.zip` (or the store `PPSA99997.zip`).
-2. Copy the `PPSA99997` folder to `/data/homebrew/` on the console over FTP.
-3. Push `nuvio.elf` to the ELF loader once for this boot.
-4. Launch Nuvio from the console home screen.
-
-The payload reports:
-
-```text
-NUVIO payload ready: PPSA99997 only, FW 13.60
-NUVIO ui: serving /data/homebrew/PPSA99997/webui on 127.0.0.1:4173
-```
-
-`nuvio.conf` carries the console origin on the first boot when the file is
-absent:
-
-```text
-host=127.0.0.1
-port=4173
-https=0
-```
-
-ShadowMount picks up the new folder and registers it as a title. Launch the app
-after registration completes.
+Follow [Getting started](GETTING_STARTED.md) for the single-install build.
+Copy `PPSA99997/` into `/data/homebrew/`, refresh ShadowMount and open the tile.
+The title loads its embedded helper through the current boot's ELF loader on 9021.
+Release 0.1.0-alpha.2 needs the older separate `nuvio.elf` boot payload.
 
 ## Install from a source build
 
@@ -93,14 +48,12 @@ Use this procedure when the title and its settings do not exist. The installer
 refuses an existing installation path, an existing staging path and an existing
 `/data/nuvio/nuvio.conf`.
 
-1. Push `nuvio.elf` once for this boot.
-2. Wait for the payload ready message.
-3. Install the title.
-4. Check the title information.
-5. Launch after registration completes.
+1. Build with `make build`.
+2. Install the title.
+3. Check the title information.
+4. Launch after registration completes.
 
 ```sh
-python3 scripts/upload.py --file build/nuvio.elf
 python3 scripts/install.py
 python3 scripts/upload.py --file build/control-2.elf
 python3 scripts/upload.py --file build/control-3.elf
@@ -129,33 +82,18 @@ Save the installed receipt after a successful install:
 cp build/build.json config/installed-build.json
 ```
 
-## Install the payload with PS5 Payload Manager
-
-Every release carries `payloads.json`. It lists the single payload `nuvio.elf`
-with its SHA-256 hash.
-
-1. Open the Payload Manager dashboard.
-2. Open Settings, then Manage Sources.
-3. Add the `payloads.json` URL from the release.
-4. Load the Nuvio payload from the dashboard.
-
-Payload Manager validates the download against the recorded hash.
-
 ## Start after a reboot
 
 1. Jailbreak the console again.
-2. Start the loader, the FTP service and ShadowMount.
-3. Push `nuvio.elf` once for this boot.
-4. Launch Nuvio from its icon or with `control-3`.
+2. Start ShadowMount and the ELF loader on port 9021.
+3. Open Nuvio from its tile or with `control-3`.
 
-Push one payload per boot. It stays resident after the host stops reading its
-output and serves the UI until the console restarts. A payload from the previous
-boot no longer runs.
+The single-install title loads its embedded permission helper automatically.
 
 ## Update an installed title
 
 1. Save the receipt for the installed build.
-2. Close Nuvio through the PS5 app switcher.
+2. Let the updater close Nuvio automatically.
 3. Keep Nuvio closed during the update.
 4. Build the candidate version.
 5. Run the updater with the installed receipt.
@@ -171,15 +109,47 @@ python3 scripts/upload.py --file build/control-3.elf
 ```
 
 The updater needs an installed, unmounted folder title. It checks the candidate
-files and the permitted changes before it replaces app files. It checks each
-changed predecessor against the old receipt, saves a verified backup, and checks
-each staged replacement before it renames it.
+files and the permitted changes before it replaces app files. For `eboot.bin`,
+`control-5.elf` hashes the installed bytes on the console, saves an on-console
+rollback copy, and verifies the staged bytes before the updater renames them.
+FTP `RETR` transforms PS5 containers, so the updater does not use it to verify
+the eboot. It verifies other changed files through staged readback.
 
 The permitted changes are eboot, launch images, icon, loading RML, wordmark and
 the `webui/` folder (the browser UI ships inside the title). The updater rejects
 runtime changes, removed inventory entries and unrelated assets. An interrupted
 update can leave a partial set of new files. Use
 [recovery](TROUBLESHOOTING.md#restore-an-interrupted-update) to reconcile it.
+
+## Development feedback
+
+Close Nuvio, update the build, then run the feedback command:
+
+```sh
+make check
+make build
+python3 scripts/update.py --previous-receipt config/installed-build.json
+make feedback
+```
+
+The command checks helper hashes and the installed eboot before launch.
+It reports only startup events added after launch.
+It finishes when the listener accepts a connection and Nuvio reports a page route.
+Private stream URLs and login values stay out of its output.
+
+Use `--gate loopback` to check listener permissions separately from page loading:
+
+```sh
+python3 scripts/feedback.py --gate loopback
+```
+
+The command loads only title-information, hash and launch controls.
+It never loads the Nuvio permission helper or UI server.
+Keep the normal boot payload running for the current release's UI check.
+Use a fresh jailbreak without that payload for the unpromoted diagnostic.
+
+Save the new installed receipt after the updater succeeds.
+Record TV observations and playback tests separately in [Validation](VALIDATION.md).
 
 ## Copy synced addons into native EVO
 
@@ -212,17 +182,20 @@ python3 scripts/update.py \
 
 Keep `scripts/serve.py` running while you use that addon.
 
-## Change the UI origin
+## Browser storage origin
 
-The default origin is the console's own server: `127.0.0.1:4173` in
-`/data/nuvio/nuvio.conf`. `nuvio.elf` writes it on the first boot when the file is
-absent. Leave it in place for normal use.
+The title serves its packaged `webui/` through its own loopback listener.
+The provider's configured host and port remain the browser-storage key for existing accounts.
+Keep the existing `/data/nuvio/nuvio.conf` and browser state when updating.
 
-To test a development UI served from the computer, close the title and edit
-`/data/nuvio/nuvio.conf` over FTP to that computer's host and port with
-`https=0`. Keep a private copy of the old file. Start `scripts/serve.py` at that
-origin before you relaunch, and restore `127.0.0.1` to return to the console
-server.
+## Close Nuvio for development
 
-Stored browser state uses the origin host and port in its filename. A new origin
-can select different saved state, so keep a copy of the old state.
+```sh
+make close
+```
+
+Build once to create the receipt-verified close helper. The command closes only
+the unique Nuvio process and verifies an unmounted title. It does not
+terminate another foreground app. New build receipts let update and feedback
+close Nuvio automatically before their mount checks. Older receipts need the
+existing manual close procedure.

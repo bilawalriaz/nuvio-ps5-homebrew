@@ -20,10 +20,18 @@ DEFAULT_ORIGIN = 'http://127.0.0.1:4173'
 
 
 def helper(action, host, helper_dir=WORK):
+    helper_env=dict(os.environ, PS5_HOST=host)
+    if action==5:
+        helper_env['PS5_READ_IDLE_TIMEOUT']=str(max(
+            60.0,float(helper_env.get('PS5_READ_IDLE_TIMEOUT','3'))))
+    idle_timeout=float(helper_env.get('PS5_READ_IDLE_TIMEOUT','3'))
+    # Upload has separate connect/send budgets. Let the uploader finish its
+    # receive window before the parent interrupts a slow console hash.
+    helper_timeout=10+30+max(35,idle_timeout+5)+5
     result = subprocess.run(['python3', str(ROOT/'scripts/upload.py'), '--file',
                              str(helper_dir/f'control-{action}.elf')],
-                            env=dict(os.environ, PS5_HOST=host),
-                            capture_output=True, text=True, timeout=40)
+                            env=helper_env,
+                            capture_output=True, text=True, timeout=helper_timeout)
     print(result.stdout, end='')
     if result.returncode:
         raise RuntimeError(result.stderr or 'Control helper failed')
