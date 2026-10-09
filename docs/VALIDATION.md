@@ -568,3 +568,19 @@ Playback, a full asset update and a fresh-jailbreak launch remain pending.
 
 [TESTED-ON-CONSOLE] Owner confirmed playback, seeking and Circle return all work
 on the ordinary-open build. This observation uses the existing installed UI assets.
+
+## Complete file update, 2026-10-09
+
+[TESTED-ON-CONSOLE] Reconciled the installed artwork and 117 browser assets
+against read-only FTP hashes. The first attempt refused an asset missing from
+the old receipt. The reconciled predecessor let the full updater complete.
+The native and embedded helper hashes match the ordinary-open entry above.
+
+The full receipt's changed files passed staged readback checks.
+Fresh feedback then verified embedded promotion, listener, HTTP200 assets and
+`page: route home`. Settings stayed in `/data/nuvio/`.
+The private hardware log holds the exact commands and recovery receipts.
+
+[LOCALLY BUILT] The store zip carries the complete PPSA99997 folder.
+The single-install package omits separate boot-payload release assets.
+Fresh-jailbreak startup and the eventual published release remain pending.
