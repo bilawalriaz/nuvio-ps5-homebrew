@@ -305,7 +305,7 @@
 -  "contentId": "UP9000-PPSA99039_00-EVOPLAYER0000000",
 -  "contentVersion": "01.000.001",
 +  "contentId": "UP9000-PPSA99997_00-NUVIOPS500000000",
-+  "contentVersion": "01.000.002",
++  "contentVersion": "01.000.005",
    "downloadDataSize": 256,
    "gameIntent": {
      "permittedIntents": [
@@ -422,7 +422,21 @@
  static char s_hook_profile[16];      /* "" = media server, "nuvio" */
  static char s_open_url[2048];        /* what the dialog opens first */
  static char s_reopen_url[2048];      /* where it reopens after playback */
-@@ -532,7 +535,7 @@
+@@ -488,9 +491,11 @@
+ " if(i<0)i=l.indexOf('/audio/');if(i<0)return '';var p=String(u).substring(i+1).split('/');return p[1]||'';}"
+ "function handoff(u){evoLog('handoff '+String(u).substring(0,150));if(sent)return 1;sent=1;setTimeout(function(){sent=0;},30000);"
+ " var abs=new URL(u,location.href).href,id=itemId(abs),done=0;"
+-" function go(t){if(done)return;done=1;saveNow(1);"
++" function go(t){if(done)return;done=1;var back=good;"
++" if(NUVIO){if(window.__nuvioSavePlaybackReturn)window.__nuvioSavePlaybackReturn();"
++" var ret=new URL(good,location.href);ret.searchParams.set(\"nuvioPlaybackReturn\",\"1\");back=ret.href;}saveNow(1);"
+ "  fetch('/evo/play?url='+encodeURIComponent(abs)+'&title='+encodeURIComponent(t||'')+"
+-"   '&return='+encodeURIComponent(good));}"
++"   '&return='+encodeURIComponent(back));}"
+ " if(NUVIO){var pr=(lastState&&lastState.params)||{},ks=['title','name','metaTitle','itemTitle','showTitle'],t='';"
+ "  for(var q=0;q<ks.length&&!t;q++){if(typeof pr[ks[q]]==='string')t=pr[ks[q]];}"
+ /* The stream screen, still in the DOM under the player, has it in text. */
+@@ -532,7 +537,7 @@
   * panicked the console. Re-added on a timer in case the site rebuilds the
   * page body. */
  "function addClose(){if(!document.body||document.getElementById('__evoClose'))return;"
@@ -431,7 +445,7 @@
  " b.setAttribute('style','position:fixed;right:28px;bottom:28px;z-index:2147483647;padding:14px 30px;"
  "border-radius:30px;background:rgba(0,0,0,.75);color:#fff;font:24px sans-serif;cursor:pointer;"
  "border:2px solid rgba(255,255,255,.55)');"
-@@ -814,6 +817,7 @@
+@@ -814,6 +819,7 @@
          tlog("close requested by the page");
          pthread_mutex_lock(&s_mx);
          s_close_req = 1;
@@ -439,7 +453,7 @@
          pthread_mutex_unlock(&s_mx);
          respond(fd, "204 No Content", "text/plain", "", 0);
      } else if (!strncmp(path, "/evo/log", 8)) {
-@@ -1126,7 +1130,13 @@
+@@ -1126,7 +1132,13 @@
              serve_storage(fd, method, req, got, hl);
          else if (!strncmp(path, "/evo/", 5) || !s_up.enabled)
              serve_evo(fd, path);
@@ -454,7 +468,7 @@
              proxy_request(fd, req, got, hl, method, path);
      }
      free(req);
-@@ -1140,6 +1150,7 @@
+@@ -1140,6 +1152,7 @@
      while (!s_srv_stop) {
          int c = accept(s_listen_fd, NULL, NULL);
          if (c >= 0 && s_srv_stop) { close(c); break; }
@@ -462,7 +476,7 @@
          if (c < 0) {
              if (s_srv_stop) break;
              if (errno == EINTR) continue;
-@@ -1161,8 +1172,16 @@
+@@ -1161,8 +1174,16 @@
  static void server_start(void)
  {
      if (s_listen_fd >= 0) return;
@@ -480,7 +494,7 @@
      int one = 1;
      setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
      struct sockaddr_in a;
-@@ -1170,11 +1189,20 @@
+@@ -1170,11 +1191,20 @@
      a.sin_family = AF_INET;
      a.sin_port = htons((uint16_t)s_port);
      a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -503,7 +517,7 @@
      s_listen_fd = fd;
      s_srv_stop = 0;
      pthread_t t;
-@@ -1229,6 +1257,7 @@
+@@ -1229,6 +1259,7 @@
      pthread_mutex_lock(&s_mx);
      s_close_req = 0;                     /* nothing stale from a previous page */
      s_hook_seen = 0;
@@ -511,7 +525,7 @@
      s_entry_failed = 0;
      s_handoff_ready = 0;
      pthread_mutex_unlock(&s_mx);
-@@ -1253,6 +1282,7 @@
+@@ -1253,6 +1284,7 @@
          s_param.header_y     = L->y;
          LOG("layout %s", L->name);
      }
@@ -519,7 +533,7 @@
      LOG("Open url=%s ...", url);
      int rc = sceWebBrowserDialogOpen(&s_param);
      LOG("sceWebBrowserDialogOpen -> 0x%08x", (unsigned)rc);
-@@ -1401,6 +1431,15 @@
+@@ -1401,6 +1433,15 @@
      LOG("open: %s via %s hook=%s", s_open_url, s_up.base,
          s_hook_profile[0] ? s_hook_profile : "media-server");
      s_error_pending = 0;
@@ -535,7 +549,7 @@
      s_check_rc = 0;
      pthread_t t;
      pthread_attr_t at;
-@@ -1547,3 +1586,10 @@
+@@ -1547,3 +1588,10 @@
  #else
  typedef int evo_webui_not_built; /* keep the TU non-empty */
  #endif /* EVO_APP_MODULE */

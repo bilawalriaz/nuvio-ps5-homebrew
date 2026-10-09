@@ -619,3 +619,76 @@ asset hashes above.
 [UNKNOWN] We have not installed alpha.4 on the console. Install that exact
 `PPSA99997.zip`, run receipt-verified feedback, and record the observed eboot
 hash and launch artwork in the private hardware log.
+
+
+## Playback profile and route return, 2026-10-09
+
+[COMMUNITY] Owner reports alpha.4 returns to "Who's Watching?" after playback.
+[SOURCE-VERIFIED] Browser recreation loses the in-memory profile-selection flag.
+The startup profile picker runs before route restoration. The original resume
+filter also excludes title and stream screens.
+
+The native handoff now saves the selected profile and preceding route before
+synchronously saving browser storage. Its return URL includes `nuvioPlaybackReturn=1`.
+Startup consumes this saved selection once, checks the active profile still exists,
+and restores title, stream or home routes. Ordinary launches retain the picker.
+The return snapshot lasts 24 hours. Restoring it refreshes the route timestamp,
+so the original 20-minute route limit does not expire during a movie.
+Guest startup uses the same return check. Other platforms retain their resume filter.
+
+[LOCALLY BUILT] `make check` passed with 53 tests. The full title build passed:
+
+```sh
+NUVIO_WORK_DIR="$PWD/build/playback-return" make build
+```
+
+The receipt and update ZIP are in `build/playback-return/`.
+`write_store_zip` checked every title file against `build.json` and created the ZIP. ZIP SHA-256: `82b61e1f1bf535f167c8654a2e3a8196d9211a19c2baeaa50a434d94ce86c1e2`.
+Eboot SHA-256: `39dbbef26055f352794805e2cb8a9bef106253d1d0a3d67f89c7fb4d8f4daa07`.
+
+[UNKNOWN] Console validation remains pending:
+
+1. Close Nuvio and save the installed receipt and raw eboot backup.
+2. Update with the new complete receipt and run fresh UI feedback.
+3. Select a profile with Remember last profile disabled, open a title and play.
+4. Press Circle. Confirm the same profile and title or stream page return.
+5. Play again, then check natural playback end and a failed stream return.
+6. Repeat with a PIN profile, guest profile and playback longer than 20 minutes.
+7. Close and reopen the title. Confirm the ordinary profile picker still appears.
+
+Use the updater and feedback commands in [Build](BUILD.md#fast-console-loop).
+Record console versions, installed hashes and visible results before a release.
+
+
+### Playback return update installation, 2026-10-09
+
+[TESTED-ON-CONSOLE] The updater closed Nuvio and verified the unmounted title state.
+It replaced only eboot and `webui/app.bundle.js`, preserving settings.
+The console-side helper verified raw eboot SHA-256 `39dbbef26055f352794805e2cb8a9bef106253d1d0a3d67f89c7fb4d8f4daa07`.
+The UI bundle readback matched SHA-256 `c6723b9190ffbac4efee2b3c61eec6f90e28217c0a04758bbcfd9439615f8385`.
+
+Feedback verified the installed eboot, but the launch helper refused startup.
+A separate launch attempt reported `running_big_app=49176` and
+`launch refused: close the running title or sign in first`.
+The private hardware log records commands and rollback files.
+
+[UNKNOWN] Close the active app or sign in, then open Nuvio and perform the
+playback return checks above. The launch refusal prevented UI and playback return checks.
+
+
+### Owner playback return confirmation and alpha.5 package, 2026-10-09
+
+[TESTED-ON-CONSOLE] Owner confirmed "it works" after installing the playback-return
+build and testing the reported exit behavior. The installed eboot and UI bundle
+hashes are those in the preceding entry. This confirms the reported return fix.
+The private hardware log records the environment and installation commands.
+
+[LOCALLY BUILT] Alpha.5 packages the same tested native binary and UI bundle.
+Only `sce_sys/param.json` changes to content version `01.000.005`.
+`VERSION` is `0.1.0-alpha.5`. The receipt records the updated metadata hash.
+The release therefore keeps the tested playback code and browser bundle.
+Separate natural-end, long playback and guest/PIN cases remain pending.
+
+[LOCALLY BUILT] Alpha.5 store ZIP SHA-256:
+`15310094f8c65dcca45a0714e8c94316898f9afe83412e2438be1a072f4bf486`.
+The package retains the recorded eboot and UI hashes.

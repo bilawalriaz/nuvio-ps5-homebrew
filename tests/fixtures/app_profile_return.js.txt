@@ -1,0 +1,29 @@
+// GPL-3.0. Nuvio 358d08cf7496b4ba04fd62a4aaaa19cab78d7aa8 profile decision.
+async function shouldShowProfileSelection() {
+  const [profiles, pinStates] = await Promise.all([
+    ProfileManager.getProfiles(),
+    ProfileSyncService.pullProfileLockStates()
+  ]);
+  const activeProfileId = ProfileManager.getActiveProfileId();
+  const activeProfileHasPin = Boolean(
+    pinStates?.[String(activeProfileId)] || pinStates?.[Number(activeProfileId)]
+  );
+
+  if (hasSelectedProfileThisSession) {
+    return { show: false, pinStates };
+  }
+
+  // Remember last profile: when enabled and the last used profile has no PIN,
+  // skip the picker and go straight in, matching the Android TV app. A profile
+  // with a PIN always shows the picker so the PIN can be entered.
+  if (
+    ProfileManager.isRememberLastProfileEnabled() &&
+    ProfileManager.hasEverSelectedProfile() &&
+    !activeProfileHasPin
+  ) {
+    return { show: false, pinStates };
+  }
+
+  return { show: profiles.length > 1 || activeProfileHasPin, pinStates };
+}
+

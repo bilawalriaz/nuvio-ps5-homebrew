@@ -1,7 +1,77 @@
+--- a/js/app.js
++++ b/js/app.js
+@@ -55,6 +55,41 @@
+   "serverConnection"
+ ]);
+ let hasSelectedProfileThisSession = false;
++// EVO recreates the browser after playback. Resume the profile that opened Player
++// once, rather than treating that browser as a new app launch.
++const PS5_PLAYBACK_RETURN_KEY = "ps5_playback_return";
++const ps5PlaybackReturn = globalThis.__NUVIO_PS5__
++  ? LocalStore.get(PS5_PLAYBACK_RETURN_KEY, null) : null;
++if (globalThis.__NUVIO_PS5__) LocalStore.remove(PS5_PLAYBACK_RETURN_KEY);
++
++globalThis.__nuvioSavePlaybackReturn = function () {
++  if (!globalThis.__NUVIO_PS5__) return;
++  LocalStore.set(PS5_PLAYBACK_RETURN_KEY, {
++    profileId: String(ProfileManager.getActiveProfileId()),
++    resume: LocalStore.get("webos_last_resume_route", null),
++    savedAt: Date.now()
++  });
++};
++
++function canResumePs5Playback() {
++  if (!ps5PlaybackReturn || !globalThis.__NUVIO_PS5__) return false;
++  if (new URLSearchParams(window.location.search).get("nuvioPlaybackReturn") !== "1") return false;
++  const age = Date.now() - Number(ps5PlaybackReturn.savedAt);
++  if (!Number.isFinite(age) || age < 0 || age > 24 * 60 * 60 * 1000) return false;
++  const id = String(ProfileManager.getActiveProfileId());
++  if (ps5PlaybackReturn.profileId !== id) return false;
++  const profiles = LocalStore.get("profiles", []);
++  if (!Array.isArray(profiles) || !profiles.some(profile => String(profile.id) === id)) return false;
++  const resume = ps5PlaybackReturn.resume;
++  if (resume && Router.isWebOsResumeRouteRestorable(resume.route)) {
++    // The route's normal 20-minute lifetime must not expire during a movie.
++    LocalStore.set("webos_last_resume_route", { ...resume, savedAt: Date.now() });
++  } else {
++    LocalStore.remove("webos_last_resume_route");
++  }
++  return true;
++}
++
+ let appShellRendered = false;
+ let updateCheckStarted = false;
+ 
+@@ -218,7 +253,7 @@
+     pinStates?.[String(activeProfileId)] || pinStates?.[Number(activeProfileId)]
+   );
+ 
+-  if (hasSelectedProfileThisSession) {
++  if (hasSelectedProfileThisSession || canResumePs5Playback()) {
+     return { show: false, pinStates };
+   }
+ 
+@@ -584,8 +619,10 @@
+         // Honor "remember last profile" for guests too: skip the picker and go
+         // straight in with the last profile (guests have no PIN).
+         if (
+-          ProfileManager.isRememberLastProfileEnabled() &&
+-          ProfileManager.hasEverSelectedProfile()
++          canResumePs5Playback() || (
++            ProfileManager.isRememberLastProfileEnabled() &&
++            ProfileManager.hasEverSelectedProfile()
++          )
+         ) {
+           enterWithLastProfile({ restoreWebOsRoute: true }).catch((error) => {
+             console.warn("Failed to enter with last profile", error);
 --- a/js/ui/navigation/routerMethods-02-complete-route-return-back-guard.js
 +++ b/js/ui/navigation/routerMethods-02-complete-route-return-back-guard.js
-@@ -40,11 +40,12 @@
-       return Boolean(route && this.routes[route] && !WEBOS_NON_RESTORABLE_ROUTES.has(route));
+@@ -37,14 +37,15 @@
+     },
+     isWebOsResumeRouteRestorable(routeName = this.current) {
+       const route = String(routeName || "").trim();
+-      return Boolean(route && this.routes[route] && !WEBOS_NON_RESTORABLE_ROUTES.has(route));
++      return Boolean(route && this.routes[route] && (!WEBOS_NON_RESTORABLE_ROUTES.has(route) || (globalThis.__NUVIO_PS5__ && ["detail", "stream"].includes(route))));
      },
      persistWebOsResumeRoute(routeName = this.current, params = this.currentParams) {
 -      if (!Platform.isWebOS()) {

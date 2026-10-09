@@ -61,9 +61,12 @@ control of primary activation and keeps the Player settings button reachable. A
 recursion guard stops the redirected click from activating twice.
 
 The Nuvio build sets `window.__NUVIO_PS5__`, and the router uses that flag for its
-route resume methods. The flag preserves the previous restorable route when the
-player route starts and rejects an expired or invalid saved route. It does not
-enable the webOS services.
+route resume methods. The flag preserves the previous browsing route when playback starts.
+The native handoff saves a one-use profile and route snapshot and marks its return URL.
+Startup restores that profile and page when the native player reopens the browser.
+Title and stream pages can resume on PS5. Ordinary launches retain profile selection.
+The return check rejects changed, deleted or expired profile snapshots.
+It does not enable the webOS services.
 
 Circle stops playback that started through Nuvio, and the EVO playback pump then
 requests a browser reopen. Playback that started through the native settings

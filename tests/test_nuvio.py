@@ -266,15 +266,17 @@ class RouteResumeTests(unittest.TestCase):
             root=Path(tmp);target=root/'js/ui/navigation/routerMethods-02-complete-route-return-back-guard.js'
             target.parent.mkdir(parents=True)
             target.write_text((APP.parent/'tests/fixtures/router_resume.js.txt').read_text())
-            polish.patch_nuvio(root)
+            target.write_text(polish.patch_resume_router(target.read_text()))
             script=r"""
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
-const store=new Map(),ctx={__NUVIO_PS5__:true,Platform:{isWebOS:()=>false},LocalStore:{set:(k,v)=>store.set(k,v),get:(k,d)=>store.get(k)||d,remove:k=>store.delete(k)},WEBOS_RESUME_ROUTE_KEY:'resume',WEBOS_RESUME_ROUTE_TTL_MS:60000,WEBOS_NON_RESTORABLE_ROUTES:new Set(['player']),console};
+const store=new Map(),ctx={__NUVIO_PS5__:true,Platform:{isWebOS:()=>false},LocalStore:{set:(k,v)=>store.set(k,v),get:(k,d)=>store.get(k)||d,remove:k=>store.delete(k)},WEBOS_RESUME_ROUTE_KEY:'resume',WEBOS_RESUME_ROUTE_TTL_MS:60000,WEBOS_NON_RESTORABLE_ROUTES:new Set(['player','stream','detail']),console};
 const router=vm.runInNewContext('({'+fs.readFileSync(process.argv[1],'utf8')+'})',ctx);
-router.routes={streams:{},player:{},home:{}};
+router.routes={streams:{},stream:{},detail:{},player:{},home:{}};
 router.persistWebOsResumeRoute('streams',{id:'fixture'});
 router.persistWebOsResumeRoute('player',{});
 let restored=router.consumeWebOsResumeRoute();assert.equal(restored.route,'streams');assert.equal(restored.params.id,'fixture');
+router.persistWebOsResumeRoute('detail',{id:'title'});assert.equal(router.consumeWebOsResumeRoute().route,'detail');
+router.persistWebOsResumeRoute('stream',{id:'title'});assert.equal(router.consumeWebOsResumeRoute().route,'stream');
 store.get('resume').savedAt=Date.now()-61000;assert.equal(router.consumeWebOsResumeRoute(),null);
 ctx.__NUVIO_PS5__=false;router.persistWebOsResumeRoute('home',{});assert.equal(store.size,0);
 """
@@ -408,3 +410,93 @@ int main(int argc, char **argv) {
             finally:
                 server.terminate()
                 server.wait(timeout=5)
+
+
+class PlaybackProfileReturnTests(unittest.TestCase):
+    def test_browser_recreation_preserves_profile_and_route_once(self):
+        import subprocess
+        import shutil
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node unavailable')
+        script = r"""
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const code=fs.readFileSync(process.argv[1],'utf8');
+const decision=fs.readFileSync(process.argv[2],'utf8').replace(
+ 'if (hasSelectedProfileThisSession) {',
+ 'if (hasSelectedProfileThisSession || await canResumePs5Playback()) {');
+const store=new Map();let active='2';
+const profiles=[{id:'1'},{id:'2'}];store.set('profiles',profiles);
+const boot=(search='',ps5=true)=>{
+ const ctx={__NUVIO_PS5__:ps5,URLSearchParams,window:{location:{search}},
+ LocalStore:{get:(k,d)=>store.has(k)?store.get(k):d,set:(k,v)=>store.set(k,v),remove:k=>store.delete(k)},
+ ProfileManager:{getActiveProfileId:()=>active,getProfiles:async()=>profiles,
+ isRememberLastProfileEnabled:()=>false,hasEverSelectedProfile:()=>true},
+ ProfileSyncService:{pullProfileLockStates:async()=>({'2':true})},
+ Router:{isWebOsResumeRouteRestorable:r=>['detail','stream','home'].includes(r)},console};
+ vm.createContext(ctx);vm.runInContext('let hasSelectedProfileThisSession=false;'+code+decision,ctx);return ctx;
+};
+(async()=>{
+ let ctx=boot();assert.equal((await ctx.shouldShowProfileSelection()).show,true);
+ store.set('webos_last_resume_route',{route:'detail',params:{id:'movie'},savedAt:1});
+ ctx.__nuvioSavePlaybackReturn();
+ // Return after a two-hour movie, with remember-last-profile disabled and a PIN.
+ store.get('ps5_playback_return').savedAt=Date.now()-2*60*60*1000;
+ ctx=boot('?nuvioPlaybackReturn=1');
+ assert.equal((await ctx.shouldShowProfileSelection()).show,false);
+ assert.equal(store.get('webos_last_resume_route').params.id,'movie');
+ assert(Date.now()-store.get('webos_last_resume_route').savedAt<1000);
+ assert.equal(store.has('ps5_playback_return'),false);
+ assert.equal((await boot().shouldShowProfileSelection()).show,true);
+ // A cold title launch cannot reuse a leftover handoff snapshot.
+ ctx.__nuvioSavePlaybackReturn();assert.equal((await boot().shouldShowProfileSelection()).show,true);
+ // A changed or deleted profile cannot inherit the previous selection.
+ ctx.__nuvioSavePlaybackReturn();active='1';
+ assert.equal(await boot('?nuvioPlaybackReturn=1').canResumePs5Playback(),false);
+ active='2';ctx.__nuvioSavePlaybackReturn();profiles.pop();
+ assert.equal(await boot('?nuvioPlaybackReturn=1').canResumePs5Playback(),false);
+ profiles.push({id:'2'});ctx.__nuvioSavePlaybackReturn();
+ store.get('ps5_playback_return').savedAt=Date.now()-25*60*60*1000;
+ assert.equal(await boot('?nuvioPlaybackReturn=1').canResumePs5Playback(),false);
+ ctx.__nuvioSavePlaybackReturn();
+ assert.equal(await boot('?nuvioPlaybackReturn=1',false).canResumePs5Playback(),false);
+ // Guest startup uses the same predicate, independently of remember-profile.
+ ctx=boot();ctx.__nuvioSavePlaybackReturn();
+ assert.equal(await boot('?nuvioPlaybackReturn=1').canResumePs5Playback(),true);
+})().catch(e=>{console.error(e);process.exit(1)});
+"""
+        subprocess.run([node, '-e', script, str(APP/'ps5-resume.js'),
+                        str(APP.parent/'tests/fixtures/app_profile_return.js.txt')],
+                       check=True, timeout=10)
+
+    def test_native_hook_saves_before_handoff_and_marks_only_nuvio_return(self):
+        import json
+        import polish
+        import subprocess
+        source = '''" function go(t){if(done)return;done=1;saveNow(1);"
+"  fetch('/evo/play?url='+encodeURIComponent(abs)+'&title='+encodeURIComponent(t||'')+"
+"   '&return='+encodeURIComponent(good));}"'''
+        fixed = polish.fix_playback_handoff(source)
+        # These C string literals also use JSON-compatible escaping. Decoding
+        # them executes exactly the JavaScript emitted by the native hook.
+        hook = ''.join(json.loads(line) for line in fixed.splitlines())
+        script = r"""
+const vm=require('vm'),assert=require('assert');
+for(const nuvio of [true,false]){
+ const order=[];let request;
+ const ctx={NUVIO:nuvio,done:0,good:'http://127.0.0.1:8686/?existing=1#page',
+ location:{href:'http://127.0.0.1:8686/'},abs:'https://fixture.invalid/video',
+ window:{__nuvioSavePlaybackReturn:()=>order.push('profile')},URL,encodeURIComponent,
+ saveNow:kind=>{assert.equal(kind,1);order.push('storage');},
+ fetch:url=>{order.push('play');request=url}};
+ vm.createContext(ctx);vm.runInContext(process.argv[1],ctx);ctx.go('Title');
+ const back=new URL(new URL(request,ctx.location.href).searchParams.get('return'));
+ assert.equal(back.searchParams.get('nuvioPlaybackReturn'),nuvio?'1':null);
+ assert.equal(back.searchParams.get('existing'),'1');assert.equal(back.hash,'#page');
+ assert.deepEqual(order,nuvio?['profile','storage','play']:['storage','play']);
+ ctx.go('again');assert.equal(order.length,nuvio?3:2);
+}
+"""
+        subprocess.run(['node', '-e', script, hook], check=True, timeout=10)
+        with self.assertRaises(RuntimeError):
+            polish.fix_playback_handoff('changed upstream')
