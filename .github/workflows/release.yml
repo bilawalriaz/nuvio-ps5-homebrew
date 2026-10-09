@@ -66,11 +66,11 @@ jobs:
         with:
           path: .cache
           key: nuvio-inputs-${{ hashFiles('deps.lock') }}
-      - name: Publish release
+      - name: Create draft release
         if: success() && github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          args=(--title "Nuvio PS5 ${GITHUB_REF_NAME}" --generate-notes)
+          args=(--draft --title "Nuvio PS5 ${GITHUB_REF_NAME}" --generate-notes)
           case "${GITHUB_REF_NAME}" in *alpha*|*beta*|*rc*) args+=(--prerelease) ;; esac
           gh release create "${GITHUB_REF_NAME}" "${args[@]}" $(cat release/ASSETS)

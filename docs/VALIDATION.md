@@ -584,3 +584,11 @@ The private hardware log holds the exact commands and recovery receipts.
 [LOCALLY BUILT] The store zip carries the complete PPSA99997 folder.
 The single-install package omits separate boot-payload release assets.
 Fresh-jailbreak startup and the eventual published release remain pending.
+
+## Fresh-jailbreak startup, 2026-10-09
+
+[TESTED-ON-CONSOLE] Owner restarted the console, ran Relapse and the normal
+services, and left Nuvio closed with no Nuvio helper loaded. Same endpoint.
+The complete ordinary-open build then passed receipt-verified feedback:
+embedded promotion, bind/listen, packaged HTTP200 and route profileSelection.
+The private hardware log records the exact command and full environment tuple.

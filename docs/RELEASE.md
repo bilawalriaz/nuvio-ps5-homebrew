@@ -24,7 +24,9 @@ The PS5 Homebrew Store catalog accepts pre-release tags. Use a fixed tag such as
 
 The release workflow builds on macOS when you push a version tag. It runs the
 host checks, builds the native title and helpers, packages the artifacts, and
-creates a GitHub release with the assets below.
+creates a draft GitHub release with the assets below.
+Download the draft assets and test those exact files on the console.
+Publish the draft after recording their hashes and results in Validation.
 
 ```sh
 git tag v0.1.0-alpha.1
