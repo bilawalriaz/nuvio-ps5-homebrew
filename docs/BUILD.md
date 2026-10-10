@@ -240,3 +240,21 @@ Review the derived files it prints, then run the console loop above.
 Update EVO separately with `--only evo-player-nuvio-source`.
 Update the SDK and pacbrew separately because they change target libraries.
 Keep the previous receipt and raw eboot backup until console checks pass.
+
+
+## Network seek regression
+
+The host suite executes the adapted upstream retry policy without the PS5 SDK.
+For the HTTP integration test, install host FFmpeg, pkg-config and clang.
+Run the local rate-limit server and both readers:
+
+```sh
+python3 scripts/check_network_seek.py \
+  --source-dir build/network-seek/EVO-PLAYER-PS5-9ee9a5420c73b5be448610e5f0a90a29a75592f3/projects/evoplayer \
+  --out-dir build/seek-host-test
+```
+
+Use your work directory in `--source-dir`. The test generates its own video.
+It checks repeated range seeks, provider headers, temporary rate limits and a
+permanent HTTP429 response. Logs and counters stay in the output directory.
+The test compiles the probe and adapter with AddressSanitizer and UndefinedBehaviorSanitizer.

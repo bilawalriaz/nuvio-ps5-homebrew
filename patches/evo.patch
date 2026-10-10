@@ -257,6 +257,44 @@
 +extern "C"
 +#endif
 +int evo_webui_native_requested(void);
+--- a/projects/evoplayer/media/src/evo_stream_io.c
++++ b/projects/evoplayer/media/src/evo_stream_io.c
+@@ -229,6 +229,8 @@
+     av_dict_set(opts, "reconnect_streamed", "1", 0);
+     av_dict_set(opts, "reconnect_on_network_error", "1", 0);
+     av_dict_set(opts, "reconnect_delay_max", "2", 0);
++    av_dict_set(opts, "reconnect_on_http_error", "429,503", 0);
++    av_dict_set(opts, "respect_retry_after", "1", 0);
+     av_dict_set(opts, "rw_timeout", "5000000", 0);
+     av_dict_set(opts, "timeout", "5000000", 0);
+ 
+@@ -468,21 +470,11 @@
+                                         ? EVO_STREAM_IO_NET_OPEN_DEADLINE_SEC
+                                         : EVO_STREAM_IO_OPEN_DEADLINE_SEC);
+ 
+-    /*
+-     * A big file over HTTP is fetched by several connections at once. One
+-     * connection is usually the limit rather than the line: Wi-Fi caps a
+-     * single stream, and debrid hosts cap per connection. Falls back to
+-     * FFmpeg's own reader for small files, playlists and hosts without byte
+-     * ranges, which is what every source used before.
+-     */
+-    if (ctx->is_network && !evo_stream_io_url_is_playlist(path) &&
+-        strncmp(path, "http", 4) == 0) {
+-        ctx->pio = evo_pio_open(path, evo_stream_headers, evo_stream_user_agent);
+-        if (ctx->pio) {
+-            fmt->pb = evo_pio_avio(ctx->pio);
+-            fmt->flags |= AVFMT_FLAG_CUSTOM_IO;
+-        }
+-    }
++    /* Six range readers caused HTTP429 storms after provider seeks (#4).
++     * Use FFmpeg's reader: one connection, provider headers, range seeks and
++     * the bounded retry policy below. The custom reader bypassed that policy. */
++    if (ctx->is_network)
++        SIO_BC("P8_01d1_HTTP_READER", "single connection");
+ 
+     int rc = avformat_open_input(&fmt, path, NULL, &opts);
+     /* avformat_open_input frees and NULLs *fmt on failure, including on an
 --- a/projects/evoplayer/pp/src/evo_theme.c
 +++ b/projects/evoplayer/pp/src/evo_theme.c
 @@ -28,7 +28,7 @@
@@ -280,7 +318,7 @@
 -  "contentId": "UP9000-PPSA99039_00-EVOPLAYER0000000",
 -  "contentVersion": "01.012.000",
 +  "contentId": "UP9000-PPSA99997_00-NUVIOPS500000000",
-+  "contentVersion": "01.000.006",
++  "contentVersion": "01.000.007",
    "downloadDataSize": 256,
    "gameIntent": {
      "permittedIntents": [

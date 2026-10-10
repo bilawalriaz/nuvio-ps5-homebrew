@@ -37,6 +37,7 @@ port never runs a browser inside the native decoder.
 | Controller bridge | Direct X to the focused Nuvio element | Avoid activation at the fixed browser pointer |
 | Seek request | Accept an active provider demuxer without a local history path | Support seeks in provider streams |
 | Seek state | Announce only accepted seek requests | A rejected request must not leave playback in seeking |
+| Network reader | Use FFmpeg HTTP range reads and bounded retries | Avoid parallel connection storms after provider seeks |
 | Native loading screen | Draw Nuvio branding during automatic transitions | Hide the EVO menus during those transitions |
 | Playback exit | Stop Nuvio playback on Circle | Return without the hidden native confirmation |
 | Playback overlays | Keep active playback screens visible | Preserve native controls and dialogs |
@@ -75,13 +76,17 @@ playback session is active.
 
 ## Decoder and seeking
 
-EVO owns demuxing, audio, native decoding and stream cleanup, and the port keeps
-that engine intact. [TESTED-ON-CONSOLE] The log identifies `sceVideodec2` for the
+EVO owns demuxing, audio, native decoding and stream cleanup. [TESTED-ON-CONSOLE] The log identifies `sceVideodec2` for the
 recorded H.264 streams. See [Validation](VALIDATION.md) for dimensions and hashes.
 
 EVO clears the local media path for web provider streams. EVO 0.12.0 accepts
 provider seeks with an active demuxer and announces only accepted requests.
 The adapter checks those upstream guards before building.
+
+Nuvio uses FFmpeg's single HTTP reader for network files. It preserves provider
+headers and range seeking. HTTP429 and HTTP503 responses use bounded reconnects
+and respect Retry-After. EVO's six-connection cache caused rate limits after seeks
+on the recorded UsenetStreamer source. See [Validation](VALIDATION.md).
 
 The fix does not change decoder timing and does not force a shorter settle
 interval. Source access, keyframes, demuxing and network delay all affect seek

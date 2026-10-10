@@ -779,3 +779,38 @@ The log shows failed chunk reads and repeated HTTP429 responses with six connect
 [Issue #4](https://github.com/bilawalriaz/nuvio-ps5-homebrew/issues/4) tracks the seek problem.
 The owner chose to publish alpha.6 and address seeking separately.
 An explicit receiver format and codec observation remains pending.
+
+
+## Network seek fix, 2026-10-10
+
+[SOURCE-VERIFIED] The adapter replaces EVO's parallel HTTP reader with FFmpeg
+range reads. Provider headers and playlist behavior remain intact. HTTP429 and
+HTTP503 reconnects follow the existing retry budget and respect Retry-After.
+
+[LOCALLY BUILT] The local HTTP test advertised a 256 MiB file with a two-response
+limit. Six readers made 222 requests and received 166 rate-limit responses.
+The adapted reader made nine requests and received one rate-limit response.
+All five adapted range seeks passed. A permanently limited endpoint failed after
+two requests in 1.2 seconds. The probe and adapter passed ASan and UBSan checks.
+Host FFmpeg was 9.0.1. The console build uses pinned FFmpeg 7.1.1.
+
+[TESTED-ON-CONSOLE] A separate I/O probe on firmware 13.60 opened the same
+22 GB UsenetStreamer source and passed nine seeks, including 371.664 and 835.083 seconds.
+The probe used the adapted source and the pinned console FFmpeg libraries.
+Probe SHA-256: `d02f7ae36f6fee34cbb43444a390a123b9f600e8d690892112d54bdfa3ed13ff`.
+
+A temporary development build enabled EVO's existing remote controls.
+The player decoded HEVC10 at 3840x2160 and resumed after four absolute seeks.
+A D-pad Right command completed a scrub seek, followed by continued playback.
+Circle stopped playback. Fresh logs contained no HTTP429 response.
+The decoder closed with 626 output frames and `fatal=0` on the second run.
+Cumulative seek counters reported ten accepted seeks and zero failures.
+Development eboot SHA-256: `563f7b87114da53bafc29fcc6bb32dcaeb7008b74cb629b3408c29f8a30be700`.
+
+The normal alpha.7 build excludes development controls.
+The restored player launched with build `9ee9a542-nuvio_1010-0436`.
+Fresh feedback confirmed packaged HTTP200 responses and the profile-selection route.
+Its eboot SHA-256 is `e800b9ac03f47662bb9452bacb8fe074dc53579c4dc80d6b74c0f641c0985d26`.
+Console model: CFI-1016A 01Y. SDK v0.43 and pacbrew v0.39 remained fixed.
+Resident exploit, loader, HEN and helper revisions remain unknown.
+Visible picture, sound and browsing-return observations for this build remain pending.
