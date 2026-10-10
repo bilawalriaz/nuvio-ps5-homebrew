@@ -813,4 +813,5 @@ Fresh feedback confirmed packaged HTTP200 responses and the profile-selection ro
 Its eboot SHA-256 is `e800b9ac03f47662bb9452bacb8fe074dc53579c4dc80d6b74c0f641c0985d26`.
 Console model: CFI-1016A 01Y. SDK v0.43 and pacbrew v0.39 remained fixed.
 Resident exploit, loader, HEN and helper revisions remain unknown.
-Visible picture, sound and browsing-return observations for this build remain pending.
+[TESTED-ON-CONSOLE] The owner reports alpha.7 is installed, tested and working.
+The owner approved publication of this build.
