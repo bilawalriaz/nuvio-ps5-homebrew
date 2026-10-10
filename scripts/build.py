@@ -654,6 +654,28 @@ def provide_hui(evo):
             raise RuntimeError('ps5-homebrew-ui has no sources under ' + sub)
 
 
+def fix_network_reader(text):
+    """Keep provider range reads on FFmpeg's bounded single-connection reader."""
+    start = text.index('    /*\n     * A big file over HTTP is fetched by several connections at once.')
+    end = text.index('    int rc = avformat_open_input', start)
+    block = text[start:end]
+    if block.count('ctx->pio = evo_pio_open(') != 1 or block.count('AVFMT_FLAG_CUSTOM_IO') != 1:
+        raise RuntimeError('Pinned parallel reader block changed')
+    text = text[:start] + '''    /* Six range readers caused HTTP429 storms after provider seeks (#4).
+     * Use FFmpeg's reader: one connection, provider headers, range seeks and
+     * the bounded retry policy below. The custom reader bypassed that policy. */
+    if (ctx->is_network)
+        SIO_BC("P8_01d1_HTTP_READER", "single connection");
+
+''' + text[end:]
+    anchor = '    av_dict_set(opts, "reconnect_delay_max", "2", 0);'
+    if text.count(anchor) != 1:
+        raise RuntimeError('Pinned network retry policy changed')
+    return text.replace(anchor, anchor + '\n'
+        '    av_dict_set(opts, "reconnect_on_http_error", "429,503", 0);\n'
+        '    av_dict_set(opts, "respect_retry_after", "1", 0);')
+
+
 def fix_provider_seek(demux, controller):
     # EVO v0.12.0 handles provider seeks itself: the demuxer guard does not
     # require a local media path, and the controller resumes instead of
@@ -845,6 +867,8 @@ def adapt(evo, loopback_diagnostic=False, title_ui=False, auto_bootstrap=False):
     controller = app/'core/src/services/PlaybackController.cpp'
     fixed = fix_provider_seek(demux.read_text(), controller.read_text())
     demux.write_text(fixed[0]); controller.write_text(fixed[1])
+    stream_io = app/'media/src/evo_stream_io.c'
+    stream_io.write_text(fix_network_reader(stream_io.read_text()))
     # Keep diagnostics available without a USB stick on this console.
     replace_once(app/'src/evo_boot_log.c', '"/mnt/usb0/evo.log"', '"/data/nuvio/evo.log"')
     # Omit the unused AV1 add-on archive from the baseline pacbrew build.
