@@ -79,10 +79,9 @@ EVO owns demuxing, audio, native decoding and stream cleanup, and the port keeps
 that engine intact. [TESTED-ON-CONSOLE] The log identifies `sceVideodec2` for the
 recorded H.264 streams. See [Validation](VALIDATION.md) for dimensions and hashes.
 
-EVO clears the local media path for web provider streams, and the old seek guard
-required that path despite an active demuxer. The adapter removes the path
-requirement and keeps the demuxer and stream checks. The controller announces
-seeking only after the demuxer accepts the request.
+EVO clears the local media path for web provider streams. EVO 0.12.0 accepts
+provider seeks with an active demuxer and announces only accepted requests.
+The adapter checks those upstream guards before building.
 
 The fix does not change decoder timing and does not force a shorter settle
 interval. Source access, keyframes, demuxing and network delay all affect seek

@@ -692,3 +692,90 @@ Separate natural-end, long playback and guest/PIN cases remain pending.
 [LOCALLY BUILT] Alpha.5 store ZIP SHA-256:
 `15310094f8c65dcca45a0714e8c94316898f9afe83412e2438be1a072f4bf486`.
 The package retains the recorded eboot and UI hashes.
+
+## EVO 0.12.0 update, 2026-10-10
+
+[SOURCE-VERIFIED] The build pins EVO to the v0.12.0 release commit
+`9ee9a5420c73b5be448610e5f0a90a29a75592f3`.
+The title retains upstream passthrough, receiver probing and PCM fallback.
+Player settings exposes Settings > Audio > Audio Passthrough.
+The controller reads this setting when a new stream starts.
+The adapter verifies EVO's provider-seek fixes without rewriting them.
+
+The inherited update also pins Nuvio TV and its public login configuration to
+1.2.3. SDK v0.43 and pacbrew v0.39 remain fixed.
+EVO requires FFmpeg 7.1.1 and its pinned homebrew UI submodule.
+The adapter builds FFmpeg from source and unpacks the UI submodule archive.
+The FFmpeg compiler prefix now expands the actual SDK directory.
+
+[LOCALLY BUILT] All 58 host tests, documentation and source checks passed.
+The complete native build passed with signed-container integrity checks.
+The receipt covers 237 title files and eight helpers.
+Artifacts and logs remain under `build/evo-0120/`.
+
+| Artifact | SHA-256 |
+|---|---|
+| `PPSA99997.zip` | `c1055179489bf98410d890e209841b3abc1082ffe8fc6999b10f50a17ec50829` |
+| `eboot.bin` | `ec58cbe0f94e4b2db2e61800545218c0664f8efb0307cbaf92a16ff098c7a720` |
+| `webui/app.bundle.js` | `84109831940e1e21b85bbc5983f12b8098754a9e9fa9adcabcfe4cda0a91d50e` |
+
+[LOCALLY BUILT] An uncached FFmpeg configure, compile and install passed on macOS.
+The release uses content version `01.000.006` and version `0.1.0-alpha.6`.
+Build and package commands:
+
+```sh
+export NUVIO_WORK_DIR="$PWD/build/evo-0120"
+make check
+make build
+make release
+```
+
+[UNKNOWN] Console playback and passthrough for this build remain pending.
+The startup result appears in the following session record.
+The local archives are held for testing before GitHub publication.
+
+1. Boot firmware 13.60 and run the jailbreak, ShadowMount and loader on 9021.
+2. Close foreground apps and confirm the installed predecessor receipt.
+3. Update the complete title, preserving `/data/nuvio` and the raw eboot backup.
+4. Run fresh UI feedback and confirm the new BUILD line and packaged home route.
+5. Play with passthrough disabled. Check sound, pause, seeking and Circle return.
+6. Enable Audio Passthrough in Player settings > Settings > Audio.
+7. Open a Dolby Digital stream and record the receiver's format display and sound.
+8. Repeat with Dolby Digital Plus, DTS and AAC supported by the connected receiver.
+9. Switch streams and audio tracks. Check sound resumes and seeking remains usable.
+10. Disable passthrough, start another stream and confirm PCM output returns.
+11. Close and reopen Nuvio. Check settings and the playback return profile remain correct.
+
+Use the console host and FTP port configured in [Operations](OPERATIONS.md).
+Use the same work directory for update and feedback:
+
+```sh
+python3 scripts/update.py --previous-receipt config/installed-build.json
+python3 scripts/feedback.py --gate ui
+```
+
+Record receiver model, HDMI connection, source codec, displayed format and sound.
+Record exact installed hashes and the full console environment tuple.
+Test TrueHD separately: upstream labels that passthrough path experimental.
+
+
+## EVO 0.12.0 startup, 2026-10-10
+
+[TESTED-ON-CONSOLE] The alpha.6 player launched on firmware 13.60 and reached the
+Nuvio home route. The console model was CFI-1016A 01Y. The build pinned SDK v0.43 and pacbrew v0.39. Resident exploit, loader, HEN and mount-service revisions remain unknown.
+
+Before replacement, the raw player hash and 235 noncontainer files matched the
+previous receipt. The update verified the staged and installed player hashes.
+The update retained the runtime module without downloading it again.
+
+Eboot SHA-256: `ec58cbe0f94e4b2db2e61800545218c0664f8efb0307cbaf92a16ff098c7a720`.
+Browser bundle SHA-256: `84109831940e1e21b85bbc5983f12b8098754a9e9fa9adcabcfe4cda0a91d50e`.
+
+`scripts/feedback.py --gate ui` reported build `9ee9a542-nuvio_1010-0357`, successful
+promotion, packaged responses 200 and `page: route home`.
+The owner reports startup, playback and exit work. Smaller Penguplay streams seek normally.
+Large UsenetStreamer streams can stall after seeking. Pause/resume often restores playback.
+The log shows failed chunk reads and repeated HTTP429 responses with six connections.
+[Issue #4](https://github.com/bilawalriaz/nuvio-ps5-homebrew/issues/4) tracks the seek problem.
+The owner chose to publish alpha.6 and address seeking separately.
+An explicit receiver format and codec observation remains pending.

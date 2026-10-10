@@ -114,7 +114,10 @@ class ProviderSeekTests(unittest.TestCase):
         if not compiler:
             self.skipTest('No host C compiler')
         demux=(APP.parent/'tests/fixtures/nuvio_seek.c.txt').read_text()
-        controller='    prospero_request_inplace_seek(targetSeconds, 0);\n    pp_playback_notify_seek_begin(&g_pp_pb, targetUs);'
+        controller=('    if (!prospero_request_inplace_seek(targetSeconds, 0)) {\n'
+                    '        return;\n'
+                    '    }\n'
+                    '    pp_playback_notify_seek_begin(&g_pp_pb, targetUs);')
         fixed,_=build.fix_provider_seek(demux,controller)
         harness=r"""
 #include <assert.h>
@@ -147,6 +150,31 @@ int main(void) {
             binary=Path(tmp)/'seek'
             subprocess.run([compiler,'-std=c11','-Wall','-Wextra','-Werror','-pthread',str(source),'-o',str(binary)],check=True,timeout=20)
             subprocess.run([str(binary)],check=True,timeout=10)
+
+    def test_provider_seek_contract_move_is_refused(self):
+        # v0.12.0 drops the demuxer's local-path requirement and resumes a
+        # refused seek in the controller. A revision that restores the old
+        # guard, or moves the controller contract, must stop the build.
+        legacy=('int prospero_request_inplace_seek(double t, int r) {\n'
+                '    if (\n'
+                '        !play_fmt ||\n'
+                '        (video_stream_index < 0 && audio_stream_index < 0) ||\n'
+                '        !current_media_path[0]\n'
+                '    ) {\n'
+                '        return 0;\n'
+                '    }\n'
+                '    return 1;\n'
+                '}')
+        controller=('    if (!prospero_request_inplace_seek(targetSeconds, 0)) {\n'
+                    '        return;\n'
+                    '    }\n'
+                    '    pp_playback_notify_seek_begin(&g_pp_pb, targetUs);')
+        with self.assertRaises(RuntimeError):
+            build.fix_provider_seek(legacy, controller)
+        with self.assertRaises(RuntimeError):
+            build.fix_provider_seek(
+                '        (video_stream_index < 0 && audio_stream_index < 0)\n    ) {',
+                'controller without the pinned anchors')
 
 
 class LoopbackDiagnosticAdapterTests(unittest.TestCase):
@@ -185,6 +213,21 @@ class LoopbackDiagnosticAdapterTests(unittest.TestCase):
     def test_unpromoted_diagnostic_refuses_moved_preflight_anchor(self):
         with self.assertRaises(RuntimeError):
             build.bypass_loopback_origin_preflight('case P_CHECK: break;')
+
+
+class FFmpegProfileTests(unittest.TestCase):
+    def test_profile_keeps_evo_minimum_and_drops_dav1d(self):
+        # The FFmpeg stage must keep the components the port relies on, keep the
+        # native AV1 decoder out, and keep the deliberate no-dav1d policy; a
+        # drifted flag list would change format support silently.
+        for flag in ('--disable-everything', '--enable-swscale', '--enable-network',
+                     '--enable-openssl', '--enable-libxml2', '--enable-decoder=hevc',
+                     '--enable-decoder=truehd', '--enable-demuxer=matroska',
+                     '--enable-demuxer=hls', '--enable-protocol=crypto',
+                     '--enable-parser=av1', '--enable-bsf=av1_frame_merge'):
+            self.assertIn(flag, build.FFMPEG_FLAGS)
+        self.assertNotIn('--enable-decoder=av1', build.FFMPEG_FLAGS)
+        self.assertEqual([f for f in build.FFMPEG_FLAGS if 'dav1d' in f], [])
 
 
 class ControlEvidenceTests(unittest.TestCase):
@@ -231,6 +274,19 @@ class UpdateMetadataTests(unittest.TestCase):
         after={**before,'contentVersion':'01.000.002'}
         self.assertTrue(update.safe_param_update(json.dumps(before).encode(),
                                                  json.dumps(after).encode()))
+        # EVO v0.12.0 adds the flexible-memory declaration with the update.
+        with_memory={**after,'kernel':{'flexibleMemorySize':1073741824}}
+        self.assertTrue(update.safe_param_update(json.dumps(before).encode(),
+                                                 json.dumps(with_memory).encode()))
+        self.assertFalse(update.safe_param_update(
+            json.dumps(with_memory).encode(),
+            json.dumps({**after,'kernel':{'flexibleMemorySize':2097152}}).encode()))
+        self.assertFalse(update.safe_param_update(
+            json.dumps(before).encode(),
+            json.dumps({**after,'kernel':{'flexibleMemorySize':1048577}}).encode()))
+        self.assertFalse(update.safe_param_update(
+            json.dumps(before).encode(),
+            json.dumps({**after,'kernel':{'flexibleMemorySize':1073741824,'other':1}}).encode()))
         for change in ({'titleId':'PPSA11111'},
                        {'contentId':'UP9000-PPSA11111_00-NUVIOPS500000000'},
                        {'localizedParameters':{'en-US':{'titleName':'Other'}}},
@@ -253,6 +309,21 @@ class UpdateMetadataTests(unittest.TestCase):
         self.assertIsNone(update.parse_eboot_report(absent)['stage'])
         with self.assertRaises(RuntimeError):
             update.parse_eboot_report('NUVIO eboot installed=unknown')
+
+    def test_update_remote_dirs_lists_parent_chain(self):
+        import update
+        self.assertEqual(update.remote_dirs('/data/homebrew/PPSA99997/assets/hui/sfx/focus_01.wav'),
+                         ['/data','/data/homebrew','/data/homebrew/PPSA99997','/data/homebrew/PPSA99997/assets','/data/homebrew/PPSA99997/assets/hui','/data/homebrew/PPSA99997/assets/hui/sfx'])
+        self.assertEqual(update.remote_dirs('/x.txt'), [])
+
+    def test_update_allowlist_covers_evo_assets_and_keeps_the_native_set(self):
+        import update
+        reviewed=['eboot.bin','sce_sys/param.json','webui/app.bundle.js','webui/css/bundle.css',
+                  'assets/rml/launch.rml','assets/hui/sfx/focus_01.wav',
+                  'assets/hui/fonts/inter-regular.huifont']
+        self.assertTrue(update.changes_are_reviewed(reviewed))
+        self.assertFalse(update.changes_are_reviewed(['sce_module/libc.prx']))
+        self.assertFalse(update.changes_are_reviewed(['assets/icons/other.png']))
 
 
 class RouteResumeTests(unittest.TestCase):

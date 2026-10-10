@@ -17,12 +17,13 @@ install the tools below yourself. The builder never installs or updates them.
 | Python | 3.13.7 | Build scripts, tests and file checks |
 | Node.js | 22.23.2 | Nuvio UI build and JavaScript tests |
 | LLVM and lld | 23.1.2 | PS5 compilation and linking |
+| nasm | 3.02 | Assembles FFmpeg's x86-64 optimized routines |
 | Homebrew coreutils | Version not recorded | GNU tools for the upstream build |
 | Apple command-line tools | Version not recorded | macOS converter and SDK paths |
 | FFmpeg | Version not recorded | Optional generated test clip |
 
 ```sh
-brew install llvm lld coreutils
+brew install llvm lld coreutils nasm
 ```
 
 Install the `lld` formula as well as `llvm`. Homebrew keeps `ld.lld` outside the
@@ -64,7 +65,13 @@ cp build/build.json config/candidate-build.json
 
 The build checks each archive against `deps.lock` before it unpacks it, runs
 `npm ci` with the upstream lock file, and applies the source changes through
-checked anchors. It stops when an anchor moves.
+checked anchors. It stops when an anchor moves. It then compiles FFmpeg 7.1.1
+(EVO's minimal configuration, minus libdav1d) and installs it over the
+sysroot copy, replacing pacbrew's 7.0-era libav* libraries: the integrated
+EVO v0.12.0 source refuses any other libavcodec. The build keeps the compiled
+output under `.cache/` and later builds reuse it. The build also unpacks the
+pinned `ps5-homebrew-ui` archive into `third_party/`, where the EVO Makefile
+expects its submodule.
 
 The builder writes `patches/evo.patch` and `patches/nuvio.patch` for review. The
 Python adapters already apply those changes, so do not apply the patches again.
@@ -137,7 +144,7 @@ build, server, install and update scripts.
 ## Public browser configuration
 
 The source build does not carry the official TV login configuration. The builder
-reads that configuration from the pinned Nuvio Tizen 1.2.2 package. It accepts an
+reads that configuration from the pinned Nuvio Tizen 1.2.3 package. It accepts an
 anonymous or publishable browser key and checks the configured service URLs for
 HTTPS. It copies only the selected browser configuration values and installs no
 Tizen executables.
@@ -153,7 +160,9 @@ make upstream
 
 `scripts/update_upstreams.py` reports which `deps.lock` pins are behind their
 upstream release. `--apply` re-pins a changed input only after it downloads and
-hashes the new archive, and the builder verifies those hashes as usual.
+hashes the new archive, and the builder verifies those hashes as usual. The
+FFmpeg source pin is not tracked by that tool: bump it by hand and record the
+checksum after verifying the download.
 
 ## The build pins its locale
 

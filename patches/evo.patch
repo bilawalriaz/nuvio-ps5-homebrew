@@ -75,7 +75,7 @@
   *
 --- a/projects/evoplayer/core/src/Application.cpp
 +++ b/projects/evoplayer/core/src/Application.cpp
-@@ -585,6 +585,7 @@
+@@ -595,6 +595,7 @@
  PlaybackSource g_web_src;
  pthread_t g_web_thread;
  std::atomic<bool> g_web_done{false};
@@ -83,7 +83,7 @@
  std::atomic<bool> g_web_ok{false};
  
  void* web_start_worker(void*) {
-@@ -692,6 +693,7 @@
+@@ -704,6 +705,7 @@
          char url[2048], title[256];
          if (!evo_webui_take_play(url, sizeof url, title, sizeof title))
              return;
@@ -91,7 +91,7 @@
          g_web_src = PlaybackSource();
          g_web_src.url = url;
          g_web_src.title = title[0] ? title : "Web";
-@@ -713,6 +715,7 @@
+@@ -725,6 +727,7 @@
          if (!g_web_done)
              return;
          pthread_join(g_web_thread, nullptr);
@@ -99,7 +99,7 @@
          evo_bt("web: startPlaybackSource -> %s", g_web_ok ? "ok" : "failed");
          evo_boot_log_flush();
          if (!g_web_ok) {
-@@ -1140,6 +1143,15 @@
+@@ -1196,6 +1199,15 @@
           * what turns that into a main-thread callback for the screen. */
          evo_bundle_poll();
          evo_usb_remote_poll();
@@ -115,7 +115,7 @@
          evo_webui_pump();   /* #101: the system browser, when a web UI is open */
          webui_playback_pump();
  
-@@ -1411,6 +1423,9 @@
+@@ -1467,6 +1479,9 @@
  
          // 3. Determine if graphics needs to render/present
          bool isPlayer = (m_screenManager->getCurrentScreenId() == ScreenId::Player);
@@ -123,9 +123,9 @@
 +            !(m_playbackController && m_playbackController->isActive()) &&
 +            !evo_webui_native_requested();
          bool isSurround = (m_screenManager->getCurrentScreenId() == ScreenId::SurroundTest);
-         bool isHighRefresh = isPlayer || isSurround;
  
-@@ -1466,7 +1481,7 @@
+         static bool s_was_player = false;
+@@ -1579,7 +1594,7 @@
           * page or a bundle refresh landing between two button presses would
           * not be drawn until the next press.
           */
@@ -134,7 +134,7 @@
                         evo_rmlui_needs_frame() ||
                         evo_rmlui_provider_needs_frame() || (jb_repaint > 0);
          if (jb_repaint > 0) jb_repaint--;
-@@ -1655,7 +1670,11 @@
+@@ -1803,7 +1818,11 @@
                      evo_bt("frame %d: screenManager render begin", frame);
                      evo_boot_log_flush();
                  }
@@ -155,7 +155,7 @@
  #include "evo/Application.hpp"
  #include "evo_rmlui_bridge.h"
  #include "evo_playback.h"
-@@ -146,6 +147,13 @@
+@@ -169,6 +170,13 @@
          return true;
      }
      if (pressed & PadButtons::Circle) {
@@ -169,19 +169,6 @@
          // Stop playback confirmation prompt
          if (screenMgr) {
              screenMgr->navigateTo(ScreenId::ExitConfirm);
---- a/projects/evoplayer/core/src/services/PlaybackController.cpp
-+++ b/projects/evoplayer/core/src/services/PlaybackController.cpp
-@@ -1422,8 +1422,8 @@
-     resume_base_offset_seconds = targetSeconds;
- 
-     int64_t targetUs = static_cast<int64_t>(targetSeconds * 1000000.0);
--    prospero_request_inplace_seek(targetSeconds, 0);
--    pp_playback_notify_seek_begin(&g_pp_pb, targetUs);
-+    if (prospero_request_inplace_seek(targetSeconds, 0))
-+        pp_playback_notify_seek_begin(&g_pp_pb, targetUs);
- }
- 
- void PlaybackController::jumpChapter(int direction) {
 --- a/projects/evoplayer/include/evo_data_path.h
 +++ b/projects/evoplayer/include/evo_data_path.h
 @@ -4,19 +4,19 @@
@@ -270,18 +257,6 @@
 +extern "C"
 +#endif
 +int evo_webui_native_requested(void);
---- a/projects/evoplayer/media/src/evo_demux.c
-+++ b/projects/evoplayer/media/src/evo_demux.c
-@@ -102,8 +102,7 @@
- ) {
-     if (
-         !play_fmt ||
--        (video_stream_index < 0 && audio_stream_index < 0) ||
--        !current_media_path[0]
-+        (video_stream_index < 0 && audio_stream_index < 0)
-     ) {
-         return 0;
-     }
 --- a/projects/evoplayer/pp/src/evo_theme.c
 +++ b/projects/evoplayer/pp/src/evo_theme.c
 @@ -28,7 +28,7 @@
@@ -303,13 +278,13 @@
 +  "conceptId": "99997",
    "contentBadgeType": 1,
 -  "contentId": "UP9000-PPSA99039_00-EVOPLAYER0000000",
--  "contentVersion": "01.000.001",
+-  "contentVersion": "01.012.000",
 +  "contentId": "UP9000-PPSA99997_00-NUVIOPS500000000",
-+  "contentVersion": "01.000.005",
++  "contentVersion": "01.000.006",
    "downloadDataSize": 256,
    "gameIntent": {
      "permittedIntents": [
-@@ -22,7 +22,7 @@
+@@ -25,7 +25,7 @@
    "localizedParameters": {
      "defaultLanguage": "en-US",
      "en-US": {
@@ -318,7 +293,7 @@
      }
    },
    "masterVersion": "01.00",
-@@ -33,6 +33,6 @@
+@@ -36,6 +36,6 @@
    },
    "requiredSystemSoftwareVersion": "0x0000000000000000",
    "sdkVersion": "0x0000000000000000",
@@ -328,7 +303,7 @@
  }
 --- a/projects/evoplayer/src/evo_boot_log.c
 +++ b/projects/evoplayer/src/evo_boot_log.c
-@@ -16,7 +16,7 @@
+@@ -93,7 +93,7 @@
  extern int sceKernelSendNotificationRequest(int, void *, unsigned long, int);
  #endif
  
@@ -562,7 +537,7 @@
 +}
 --- a/projects/evoplayer/ui_rml/include/evo_rmlui_app.h
 +++ b/projects/evoplayer/ui_rml/include/evo_rmlui_app.h
-@@ -602,6 +602,7 @@
+@@ -658,6 +658,7 @@
  
      void UpdateLaunchState(const EvoLaunchState& state);
      void RenderLaunch(uint32_t* framebuffer, int width, int height);
@@ -570,7 +545,7 @@
  
      void UpdatePlaybackState(const EvoPlaybackState& state);
      void UpdatePerfHud(const evo_perf_hud_t* hud);   // #81/#63 diagnostic HUD
-@@ -704,6 +705,7 @@
+@@ -760,6 +761,7 @@
      Rml::Context* m_context = nullptr;
      /* panel width / EVO_UI_DESIGN_W; 1.0 at 1080p. Applied to every context. */
      float m_dp_ratio = 1.0f;
@@ -580,7 +555,7 @@
      Rml::ElementDocument* m_browser_doc = nullptr;
 --- a/projects/evoplayer/ui_rml/include/evo_rmlui_bridge.h
 +++ b/projects/evoplayer/ui_rml/include/evo_rmlui_bridge.h
-@@ -595,6 +595,7 @@
+@@ -743,6 +743,7 @@
  /* Launch / home screen API */
  void evo_rmlui_update_launch(const evo_rmlui_launch_params_t* params);
  void evo_rmlui_render_launch(uint32_t* framebuffer, int width, int height);
@@ -590,7 +565,7 @@
  void evo_rmlui_update_list(const evo_rmlui_list_params_t* params);
 --- a/projects/evoplayer/ui_rml/src/evo_rmlui_app.cpp
 +++ b/projects/evoplayer/ui_rml/src/evo_rmlui_app.cpp
-@@ -226,7 +226,7 @@
+@@ -229,7 +229,7 @@
          m_launch_doc, m_list_doc, m_browser_doc, m_changelog_doc, m_reader_doc,
          m_image_doc, m_surround_doc, m_playback_doc, m_dialog_doc,
          m_settings_doc, m_about_doc, m_subtitles_doc, m_mediainfo_doc,
@@ -599,7 +574,7 @@
      };
      for (Rml::ElementDocument* doc : screens) {
          if (!doc || doc == keep) continue;
-@@ -312,7 +312,7 @@
+@@ -319,7 +319,7 @@
       * the /app0 sandbox's broken directory traversal never comes into play.
       * The remaining entries are host/dev fallbacks (fopen against loose
       * files) for when the bundle hasn't been (re)generated. The old
@@ -608,7 +583,7 @@
       * #44 out-of-band FTP sync target - are gone: that sync is removed
       * (deploy-app.sh), and shipping a self-contained .ffpfsc means those
       * loose console-side copies must have zero effect on rendering. */
-@@ -372,6 +372,10 @@
+@@ -379,6 +379,10 @@
      };
  
      for (const auto& p : rml_prefixes) {
@@ -619,7 +594,7 @@
          if (!m_launch_doc) {
              m_launch_doc = m_context->LoadDocument(p + "launch.rml");
              if (m_launch_doc) m_launch_doc->Hide();
-@@ -4089,3 +4093,14 @@
+@@ -4237,3 +4241,14 @@
  #endif
  }
  
@@ -636,7 +611,7 @@
 +}
 --- a/projects/evoplayer/ui_rml/src/evo_rmlui_bridge.cpp
 +++ b/projects/evoplayer/ui_rml/src/evo_rmlui_bridge.cpp
-@@ -552,3 +552,7 @@
+@@ -753,3 +753,7 @@
  
  } // extern "C"
  
@@ -657,7 +632,7 @@
          std::vector<std::string> candidates = {
 --- a/scripts/package-app.sh
 +++ b/scripts/package-app.sh
-@@ -172,7 +172,8 @@
+@@ -183,7 +183,8 @@
  # 2. Native-app dependency bootstrap (static zlib for the host converter).
  # ---------------------------------------------------------------------------
  begin "native-app dependencies"
@@ -667,7 +642,7 @@
  need_file "${ZLIB_ARCHIVE:?}" "zlib bootstrap did not yield an archive"
  
  # ---------------------------------------------------------------------------
-@@ -180,8 +181,8 @@
+@@ -191,8 +192,8 @@
  # ---------------------------------------------------------------------------
  begin "building host converter (ps5-native-tool)"
  TOOL="${BUILD}/host/ps5-native-tool"
@@ -678,7 +653,7 @@
      "${NATIVE}/native_app_builder.cpp" "${NATIVE}/self_container.cpp" \
      "${NATIVE}/elf_object.cpp" "${NATIVE}/sce_module_writer.cpp" \
      "${ZLIB_ARCHIVE}" -o "${TOOL}"
-@@ -196,7 +197,7 @@
+@@ -207,7 +208,7 @@
      expected_signed="$(awk '{print $1}' "${NATIVE}/runtime/libc.prx.sha256")"
      local work="${BUILD}/runtime-shim"
      mkdir -p "${work}"
@@ -687,16 +662,16 @@
          "${NATIVE}/libc_builder.cpp" -o "${work}/libc-builder"
      local copy
      for copy in a b; do
-@@ -274,7 +275,7 @@
+@@ -285,7 +286,7 @@
      # cached mount is caught immediately instead of costing a console session.
      # Written to a generated header to sidestep -D string quoting through the
      # make -> /bin/sh recipe chain.
 -    BUILD_SHA="$(git -C "${EVO}" rev-parse --short=8 HEAD 2>/dev/null || echo unknown)"
-+    BUILD_SHA="21524a4a-nuvio"
++    BUILD_SHA="9ee9a542-nuvio"
      git -C "${EVO}" diff --quiet -- "${EVO}" 2>/dev/null || BUILD_SHA="${BUILD_SHA}-dirty"
      printf '#pragma once\n#define EVO_BUILD_ID "%s_%s"\n' \
          "${BUILD_SHA}" "$(date -u +%m%d-%H%M)" > "${EVO}/include/evo_build_id.h"
-@@ -388,16 +389,10 @@
+@@ -406,16 +407,10 @@
      ok "librmlui.a patched"
      ARCHIVE_GROUP+=("${RML_A}")
  
@@ -714,7 +689,7 @@
               libass libfreetype libharfbuzz libharfbuzz-subset libfribidi \
               libpng16 libsamplerate libssl libcrypto libiconv libxml2 \
               libz libbz2 liblzma libzstd libm; do
-@@ -675,7 +670,7 @@
+@@ -702,7 +697,7 @@
  
  echo ""
  ok "app module: ${APPDIR#"${REPO_ROOT}/"}/"

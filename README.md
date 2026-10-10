@@ -60,6 +60,9 @@ to `build/EVO-PLAYER-PS5-*/output/app/PPSA99997/` and the helpers to
 - Player settings opens the native EVO interface. Playback started there keeps
   EVO's own stop confirmation.
 
+In Player settings, open Settings > Audio and enable Audio Passthrough.
+Start a new stream to apply it. Your HDMI soundbar or receiver decodes the audio.
+
 ## Requirements and codec support
 
 - Firmware 13.60, ShadowMount and the current boot's ELF loader on port 9021.

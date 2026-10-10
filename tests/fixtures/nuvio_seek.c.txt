@@ -1,12 +1,19 @@
-/* GPL-3.0-or-later. Exact function from EVO commit 21524a4a6effa65312be2026042e44a96efca4c6. */
+/* GPL-3.0-or-later. Exact function from EVO commit 9ee9a5420c73b5be448610e5f0a90a29a75592f3. */
 int prospero_request_inplace_seek(
     double target_seconds,
     int restore_paused
 ) {
+    /*
+     * An open stream is all a seek needs. This also required current_media_path,
+     * which PlaybackController deliberately leaves EMPTY for a provider source
+     * (a URL with a session token must not reach the sidecar scan or the
+     * favourites store) - so every seek in an Emby, Jellyfin, Xtream or IPTV
+     * VOD stream was dropped here without a word, after the scrub had already
+     * paused the clock: the picture froze. Hardware, 2026-10-01.
+     */
     if (
         !play_fmt ||
-        (video_stream_index < 0 && audio_stream_index < 0) ||
-        !current_media_path[0]
+        (video_stream_index < 0 && audio_stream_index < 0)
     ) {
         return 0;
     }

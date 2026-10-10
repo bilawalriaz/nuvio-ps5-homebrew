@@ -94,15 +94,578 @@ def replace_once(path, old, new):
     path.write_text(text.replace(old, new))
 
 
+# EVO v0.12.0 includes a Dolby Vision component that mirrors FFmpeg 7.1.1 and
+# refuses any other libavcodec, while the pinned pacbrew prefix carries the
+# 7.0-era 61.3 headers. Build FFmpeg 7.1.1 with EVO's 'minimal' configuration
+# (minus --enable-libdav1d: this port ships no dav1d, so AV1 remains
+# unsupported) and install it over the sysroot copy, replacing the pacbrew
+# libav* libraries - the same step EVO's own build performs. The result is
+# cached in .cache/ so ordinary rebuilds skip the compile.
+FFMPEG_FLAGS = (
+    # EVO scripts/build-ffmpeg.sh, profile 'minimal', libdav1d removed.
+    '--enable-cross-compile',
+    '--cross-prefix={sdk}/bin/prospero-',
+    '--enable-static',
+    '--disable-shared',
+    '--arch=x86_64',
+    '--target-os=freebsd',
+    '--cc=prospero-clang',
+    '--cxx=prospero-clang++',
+    '--nm=prospero-nm',
+    '--strip=prospero-strip',
+    '--ar=prospero-ar',
+    '--ranlib=prospero-ranlib',
+    '--pkg-config=prospero-pkg-config',
+    '--disable-debug',
+    '--disable-doc',
+    '--disable-everything',
+    '--disable-programs',
+    '--disable-avdevice',
+    '--disable-postproc',
+    '--disable-encoders',
+    '--disable-muxers',
+    '--disable-bsfs',
+    '--disable-devices',
+    '--disable-filters',
+    '--enable-network',
+    '--enable-openssl',
+    '--disable-iconv',
+    '--disable-xlib',
+    '--disable-sdl2',
+    '--enable-swresample',
+    '--enable-swscale',
+    '--enable-decoder=aac',
+    '--enable-decoder=aac_latm',
+    '--enable-decoder=ac3',
+    '--enable-decoder=eac3',
+    '--enable-decoder=dca',
+    '--enable-decoder=truehd',
+    '--enable-decoder=mlp',
+    '--enable-decoder=mp3',
+    '--enable-decoder=mp2',
+    '--enable-decoder=flac',
+    '--enable-decoder=opus',
+    '--enable-decoder=vorbis',
+    '--enable-decoder=alac',
+    '--enable-decoder=pcm_s16le',
+    '--enable-decoder=pcm_s16be',
+    '--enable-decoder=pcm_s24le',
+    '--enable-decoder=pcm_f32le',
+    '--enable-decoder=aac_fixed',
+    '--enable-decoder=ac3_fixed',
+    '--enable-decoder=acelp_kelvin',
+    '--enable-decoder=als',
+    '--enable-decoder=amrnb',
+    '--enable-decoder=amrwb',
+    '--enable-decoder=apac',
+    '--enable-decoder=ape',
+    '--enable-decoder=aptx',
+    '--enable-decoder=aptx_hd',
+    '--enable-decoder=atrac1',
+    '--enable-decoder=atrac3',
+    '--enable-decoder=atrac3al',
+    '--enable-decoder=atrac3p',
+    '--enable-decoder=atrac3pal',
+    '--enable-decoder=atrac9',
+    '--enable-decoder=binkaudio_dct',
+    '--enable-decoder=binkaudio_rdft',
+    '--enable-decoder=bmv_audio',
+    '--enable-decoder=bonk',
+    '--enable-decoder=cook',
+    '--enable-decoder=dfpwm',
+    '--enable-decoder=dolby_e',
+    '--enable-decoder=dsd_lsbf',
+    '--enable-decoder=dsd_lsbf_planar',
+    '--enable-decoder=dsd_msbf',
+    '--enable-decoder=dsd_msbf_planar',
+    '--enable-decoder=dsicinaudio',
+    '--enable-decoder=dss_sp',
+    '--enable-decoder=dst',
+    '--enable-decoder=evrc',
+    '--enable-decoder=fastaudio',
+    '--enable-decoder=ffwavesynth',
+    '--enable-decoder=ftr',
+    '--enable-decoder=g723_1',
+    '--enable-decoder=g729',
+    '--enable-decoder=gsm',
+    '--enable-decoder=gsm_ms',
+    '--enable-decoder=hca',
+    '--enable-decoder=hcom',
+    '--enable-decoder=iac',
+    '--enable-decoder=ilbc',
+    '--enable-decoder=imc',
+    '--enable-decoder=interplay_acm',
+    '--enable-decoder=mace3',
+    '--enable-decoder=mace6',
+    '--enable-decoder=metasound',
+    '--enable-decoder=misc4',
+    '--enable-decoder=mp1',
+    '--enable-decoder=mp1float',
+    '--enable-decoder=mp2float',
+    '--enable-decoder=mp3adu',
+    '--enable-decoder=mp3adufloat',
+    '--enable-decoder=mp3float',
+    '--enable-decoder=mp3on4',
+    '--enable-decoder=mp3on4float',
+    '--enable-decoder=mpc7',
+    '--enable-decoder=mpc8',
+    '--enable-decoder=msnsiren',
+    '--enable-decoder=nellymoser',
+    '--enable-decoder=on2avc',
+    '--enable-decoder=osq',
+    '--enable-decoder=paf_audio',
+    '--enable-decoder=qcelp',
+    '--enable-decoder=qdm2',
+    '--enable-decoder=qdmc',
+    '--enable-decoder=qoa',
+    '--enable-decoder=ra_144',
+    '--enable-decoder=ra_288',
+    '--enable-decoder=ralf',
+    '--enable-decoder=sbc',
+    '--enable-decoder=shorten',
+    '--enable-decoder=sipr',
+    '--enable-decoder=siren',
+    '--enable-decoder=smackaud',
+    '--enable-decoder=sonic',
+    '--enable-decoder=tak',
+    '--enable-decoder=truespeech',
+    '--enable-decoder=tta',
+    '--enable-decoder=twinvq',
+    '--enable-decoder=vmdaudio',
+    '--enable-decoder=wavarc',
+    '--enable-decoder=wavpack',
+    '--enable-decoder=wmalossless',
+    '--enable-decoder=wmapro',
+    '--enable-decoder=wmav1',
+    '--enable-decoder=wmav2',
+    '--enable-decoder=wmavoice',
+    '--enable-decoder=ws_snd1',
+    '--enable-decoder=xma1',
+    '--enable-decoder=xma2',
+    '--enable-decoder=pcm_alaw',
+    '--enable-decoder=pcm_bluray',
+    '--enable-decoder=pcm_dvd',
+    '--enable-decoder=pcm_f16le',
+    '--enable-decoder=pcm_f24le',
+    '--enable-decoder=pcm_f32be',
+    '--enable-decoder=pcm_f64be',
+    '--enable-decoder=pcm_f64le',
+    '--enable-decoder=pcm_lxf',
+    '--enable-decoder=pcm_mulaw',
+    '--enable-decoder=pcm_s16be_planar',
+    '--enable-decoder=pcm_s16le_planar',
+    '--enable-decoder=pcm_s24be',
+    '--enable-decoder=pcm_s24daud',
+    '--enable-decoder=pcm_s24le_planar',
+    '--enable-decoder=pcm_s32be',
+    '--enable-decoder=pcm_s32le',
+    '--enable-decoder=pcm_s32le_planar',
+    '--enable-decoder=pcm_s64be',
+    '--enable-decoder=pcm_s64le',
+    '--enable-decoder=pcm_s8',
+    '--enable-decoder=pcm_s8_planar',
+    '--enable-decoder=pcm_sga',
+    '--enable-decoder=pcm_u16be',
+    '--enable-decoder=pcm_u16le',
+    '--enable-decoder=pcm_u24be',
+    '--enable-decoder=pcm_u24le',
+    '--enable-decoder=pcm_u32be',
+    '--enable-decoder=pcm_u32le',
+    '--enable-decoder=pcm_u8',
+    '--enable-decoder=pcm_vidc',
+    '--enable-decoder=adpcm_4xm',
+    '--enable-decoder=adpcm_adx',
+    '--enable-decoder=adpcm_afc',
+    '--enable-decoder=adpcm_agm',
+    '--enable-decoder=adpcm_aica',
+    '--enable-decoder=adpcm_argo',
+    '--enable-decoder=adpcm_ct',
+    '--enable-decoder=adpcm_dtk',
+    '--enable-decoder=adpcm_ea',
+    '--enable-decoder=adpcm_ea_maxis_xa',
+    '--enable-decoder=adpcm_ea_r1',
+    '--enable-decoder=adpcm_ea_r2',
+    '--enable-decoder=adpcm_ea_r3',
+    '--enable-decoder=adpcm_ea_xas',
+    '--enable-decoder=adpcm_g722',
+    '--enable-decoder=adpcm_g726',
+    '--enable-decoder=adpcm_g726le',
+    '--enable-decoder=adpcm_ima_acorn',
+    '--enable-decoder=adpcm_ima_alp',
+    '--enable-decoder=adpcm_ima_amv',
+    '--enable-decoder=adpcm_ima_apc',
+    '--enable-decoder=adpcm_ima_apm',
+    '--enable-decoder=adpcm_ima_cunning',
+    '--enable-decoder=adpcm_ima_dat4',
+    '--enable-decoder=adpcm_ima_dk3',
+    '--enable-decoder=adpcm_ima_dk4',
+    '--enable-decoder=adpcm_ima_ea_eacs',
+    '--enable-decoder=adpcm_ima_ea_sead',
+    '--enable-decoder=adpcm_ima_iss',
+    '--enable-decoder=adpcm_ima_moflex',
+    '--enable-decoder=adpcm_ima_mtf',
+    '--enable-decoder=adpcm_ima_oki',
+    '--enable-decoder=adpcm_ima_qt',
+    '--enable-decoder=adpcm_ima_rad',
+    '--enable-decoder=adpcm_ima_smjpeg',
+    '--enable-decoder=adpcm_ima_ssi',
+    '--enable-decoder=adpcm_ima_wav',
+    '--enable-decoder=adpcm_ima_ws',
+    '--enable-decoder=adpcm_ms',
+    '--enable-decoder=adpcm_mtaf',
+    '--enable-decoder=adpcm_psx',
+    '--enable-decoder=adpcm_sbpro_2',
+    '--enable-decoder=adpcm_sbpro_3',
+    '--enable-decoder=adpcm_sbpro_4',
+    '--enable-decoder=adpcm_swf',
+    '--enable-decoder=adpcm_thp',
+    '--enable-decoder=adpcm_thp_le',
+    '--enable-decoder=adpcm_vima',
+    '--enable-decoder=adpcm_xa',
+    '--enable-decoder=adpcm_xmd',
+    '--enable-decoder=adpcm_yamaha',
+    '--enable-decoder=adpcm_zork',
+    '--enable-decoder=cbd2_dpcm',
+    '--enable-decoder=derf_dpcm',
+    '--enable-decoder=gremlin_dpcm',
+    '--enable-decoder=interplay_dpcm',
+    '--enable-decoder=roq_dpcm',
+    '--enable-decoder=sdx2_dpcm',
+    '--enable-decoder=sol_dpcm',
+    '--enable-decoder=wady_dpcm',
+    '--enable-decoder=xan_dpcm',
+    '--enable-decoder=vc1',
+    '--enable-decoder=wmv1',
+    '--enable-decoder=wmv2',
+    '--enable-decoder=wmv3',
+    '--enable-decoder=msmpeg4v1',
+    '--enable-decoder=msmpeg4v2',
+    '--enable-decoder=msmpeg4v3',
+    '--enable-decoder=mpeg1video',
+    '--enable-decoder=flv',
+    '--enable-decoder=vp6',
+    '--enable-decoder=vp6a',
+    '--enable-decoder=vp6f',
+    '--enable-decoder=h263',
+    '--enable-decoder=h263i',
+    '--enable-decoder=h263p',
+    '--enable-decoder=msvideo1',
+    '--enable-decoder=cinepak',
+    '--enable-decoder=indeo3',
+    '--enable-decoder=indeo4',
+    '--enable-decoder=indeo5',
+    '--enable-decoder=huffyuv',
+    '--enable-decoder=ffv1',
+    '--enable-decoder=utvideo',
+    '--enable-decoder=qtrle',
+    '--enable-decoder=rpza',
+    '--enable-decoder=smc',
+    '--enable-decoder=svq1',
+    '--enable-decoder=svq3',
+    '--enable-decoder=mjpegb',
+    '--enable-decoder=theora',
+    '--enable-decoder=prores',
+    '--enable-decoder=dnxhd',
+    '--enable-decoder=dvvideo',
+    '--enable-decoder=cavs',
+    '--enable-decoder=rv10',
+    '--enable-decoder=rv20',
+    '--enable-decoder=rv30',
+    '--enable-decoder=rv40',
+    '--enable-decoder=webp',
+    '--enable-decoder=webvtt',
+    '--enable-decoder=text',
+    '--enable-decoder=microdvd',
+    '--enable-decoder=sami',
+    '--enable-decoder=subviewer',
+    '--enable-decoder=subviewer1',
+    '--enable-decoder=mpl2',
+    '--enable-decoder=vplayer',
+    '--enable-decoder=pjs',
+    '--enable-decoder=jacosub',
+    '--enable-decoder=realtext',
+    '--enable-decoder=stl',
+    '--enable-decoder=xsub',
+    '--enable-decoder=ccaption',
+    '--enable-decoder=h264',
+    '--enable-decoder=hevc',
+    '--enable-decoder=vp9',
+    '--enable-decoder=vp8',
+    '--enable-decoder=mpeg2video',
+    '--enable-decoder=mpeg4',
+    '--enable-decoder=subrip',
+    '--enable-decoder=ass',
+    '--enable-decoder=srt',
+    '--enable-decoder=movtext',
+    '--enable-decoder=pgssub',
+    '--enable-decoder=dvdsub',
+    '--enable-decoder=dvbsub',
+    '--enable-decoder=mjpeg',
+    '--enable-decoder=png',
+    '--enable-demuxer=matroska',
+    '--enable-demuxer=mov',
+    '--enable-demuxer=mpegts',
+    '--enable-demuxer=mpegps',
+    '--enable-demuxer=avi',
+    '--enable-demuxer=flac',
+    '--enable-demuxer=mp3',
+    '--enable-demuxer=ogg',
+    '--enable-demuxer=wav',
+    '--enable-demuxer=aac',
+    '--enable-demuxer=ac3',
+    '--enable-demuxer=eac3',
+    '--enable-demuxer=dts',
+    '--enable-demuxer=truehd',
+    '--enable-demuxer=h264',
+    '--enable-demuxer=hevc',
+    '--enable-demuxer=srt',
+    '--enable-demuxer=ass',
+    '--enable-demuxer=image2',
+    '--enable-demuxer=ivf',
+    '--enable-demuxer=obu',
+    '--enable-demuxer=av1',
+    '--enable-bsf=av1_frame_merge',
+    '--enable-demuxer=hls',
+    '--enable-demuxer=dash',
+    '--enable-libxml2',
+    '--enable-demuxer=adx',
+    '--enable-demuxer=aiff',
+    '--enable-demuxer=amr',
+    '--enable-demuxer=amrnb',
+    '--enable-demuxer=amrwb',
+    '--enable-demuxer=apac',
+    '--enable-demuxer=ape',
+    '--enable-demuxer=aptx',
+    '--enable-demuxer=aptx_hd',
+    '--enable-demuxer=argo_asf',
+    '--enable-demuxer=asf',
+    '--enable-demuxer=ast',
+    '--enable-demuxer=au',
+    '--enable-demuxer=bfstm',
+    '--enable-demuxer=bonk',
+    '--enable-demuxer=brstm',
+    '--enable-demuxer=caf',
+    '--enable-demuxer=codec2',
+    '--enable-demuxer=dfpwm',
+    '--enable-demuxer=dsf',
+    '--enable-demuxer=dtshd',
+    '--enable-demuxer=g723_1',
+    '--enable-demuxer=g729',
+    '--enable-demuxer=gsm',
+    '--enable-demuxer=hca',
+    '--enable-demuxer=hcom',
+    '--enable-demuxer=iff',
+    '--enable-demuxer=ilbc',
+    '--enable-demuxer=ircam',
+    '--enable-demuxer=mlp',
+    '--enable-demuxer=mpc',
+    '--enable-demuxer=mpc8',
+    '--enable-demuxer=nistsphere',
+    '--enable-demuxer=oma',
+    '--enable-demuxer=osq',
+    '--enable-demuxer=pcm_alaw',
+    '--enable-demuxer=pcm_f32be',
+    '--enable-demuxer=pcm_f32le',
+    '--enable-demuxer=pcm_f64be',
+    '--enable-demuxer=pcm_f64le',
+    '--enable-demuxer=pcm_mulaw',
+    '--enable-demuxer=pcm_s16be',
+    '--enable-demuxer=pcm_s16le',
+    '--enable-demuxer=pcm_s24be',
+    '--enable-demuxer=pcm_s24le',
+    '--enable-demuxer=pcm_s32be',
+    '--enable-demuxer=pcm_s32le',
+    '--enable-demuxer=pcm_s8',
+    '--enable-demuxer=pcm_u16be',
+    '--enable-demuxer=pcm_u16le',
+    '--enable-demuxer=pcm_u24be',
+    '--enable-demuxer=pcm_u24le',
+    '--enable-demuxer=pcm_u32be',
+    '--enable-demuxer=pcm_u32le',
+    '--enable-demuxer=pcm_u8',
+    '--enable-demuxer=pcm_vidc',
+    '--enable-demuxer=pvf',
+    '--enable-demuxer=qoa',
+    '--enable-demuxer=rso',
+    '--enable-demuxer=rm',
+    '--enable-demuxer=sbc',
+    '--enable-demuxer=shorten',
+    '--enable-demuxer=sln',
+    '--enable-demuxer=sox',
+    '--enable-demuxer=spdif',
+    '--enable-demuxer=tak',
+    '--enable-demuxer=tta',
+    '--enable-demuxer=voc',
+    '--enable-demuxer=vqf',
+    '--enable-demuxer=w64',
+    '--enable-demuxer=wavarc',
+    '--enable-demuxer=wv',
+    '--enable-demuxer=wve',
+    '--enable-demuxer=xa',
+    '--enable-demuxer=xwma',
+    '--enable-demuxer=asf',
+    '--enable-demuxer=asf_o',
+    '--enable-demuxer=flv',
+    '--enable-demuxer=live_flv',
+    '--enable-demuxer=rm',
+    '--enable-demuxer=dv',
+    '--enable-demuxer=mxf',
+    '--enable-demuxer=webvtt',
+    '--enable-demuxer=microdvd',
+    '--enable-demuxer=sami',
+    '--enable-demuxer=subviewer',
+    '--enable-demuxer=subviewer1',
+    '--enable-demuxer=mpl2',
+    '--enable-demuxer=vplayer',
+    '--enable-demuxer=pjs',
+    '--enable-demuxer=jacosub',
+    '--enable-demuxer=realtext',
+    '--enable-demuxer=stl',
+    '--enable-demuxer=vc1',
+    '--enable-demuxer=vc1t',
+    '--enable-demuxer=m4v',
+    '--enable-demuxer=ivf',
+    '--enable-demuxer=mpegvideo',
+    '--enable-parser=h264',
+    '--enable-parser=hevc',
+    '--enable-parser=vp9',
+    '--enable-parser=av1',
+    '--enable-parser=aac',
+    '--enable-parser=aac_latm',
+    '--enable-parser=ac3',
+    '--enable-parser=dca',
+    '--enable-parser=mlp',
+    '--enable-parser=flac',
+    '--enable-parser=opus',
+    '--enable-parser=vorbis',
+    '--enable-parser=mpegaudio',
+    '--enable-parser=mpegvideo',
+    '--enable-parser=mpeg4video',
+    '--enable-parser=adx',
+    '--enable-parser=amr',
+    '--enable-parser=cook',
+    '--enable-parser=dolby_e',
+    '--enable-parser=dvaudio',
+    '--enable-parser=ftr',
+    '--enable-parser=g723_1',
+    '--enable-parser=g729',
+    '--enable-parser=gsm',
+    '--enable-parser=misc4',
+    '--enable-parser=sbc',
+    '--enable-parser=sipr',
+    '--enable-parser=tak',
+    '--enable-parser=xma',
+    '--enable-parser=vc1',
+    '--enable-parser=h263',
+    '--enable-parser=webp',
+    '--enable-bsf=h264_mp4toannexb',
+    '--enable-bsf=hevc_mp4toannexb',
+    '--enable-bsf=extract_extradata',
+    '--enable-bsf=aac_adtstoasc',
+    '--enable-bsf=vp9_superframe',
+    '--enable-filter=aformat',
+    '--enable-filter=aresample',
+    '--enable-filter=anull',
+    '--enable-filter=format',
+    '--enable-filter=scale',
+    '--enable-filter=null',
+    '--enable-protocol=file',
+    '--enable-protocol=pipe',
+    '--enable-protocol=http',
+    '--enable-protocol=https',
+    '--enable-protocol=tcp',
+    '--enable-protocol=tls',
+    '--enable-protocol=ftp',
+    '--enable-protocol=crypto',
+)
+
+
+def install_ffmpeg(sdk):
+    """Build the pinned FFmpeg over the sysroot homebrew prefix (cached)."""
+    pin, archive = fetch('ffmpeg-source')
+    config_id = hashlib.sha256('\n'.join([pin['sha256'], *FFMPEG_FLAGS]).encode()).hexdigest()[:16]
+    cached = CACHE / ('ffmpeg-' + config_id)
+    stamp = {'source_sha256': pin['sha256'], 'config_id': config_id, 'directory': pin['directory']}
+    stamp_file = cached / 'stamp.json'
+    if stamp_file.is_file() and json.loads(stamp_file.read_text()) == stamp:
+        shutil.copytree(cached / 'homebrew', sdk / 'target/user/homebrew', dirs_exist_ok=True)
+        print('FFmpeg', pin['directory'], 'installed from cache')
+        return
+    src = WORK / pin['directory']
+    if src.exists():
+        shutil.rmtree(src)
+    with tarfile.open(archive) as t:
+        t.extractall(WORK, filter='data')
+    stage = WORK / 'ffmpeg-stage'
+    if stage.exists():
+        shutil.rmtree(stage)
+    env = os.environ.copy()
+    llvm = subprocess.check_output(['brew', '--prefix', 'llvm'], text=True).strip()
+    core = subprocess.check_output(['brew', '--prefix', 'coreutils'], text=True).strip()
+    env.update(PS5_PAYLOAD_SDK=str(sdk),
+               PATH=os.pathsep.join([str(sdk / 'bin'), llvm + '/bin', core + '/libexec/gnubin', env['PATH']]))
+
+    def logged(args, name, **kwargs):
+        log = WORK / ('ffmpeg-' + name + '.log')
+        with log.open('w') as f:
+            proc = subprocess.run([str(a) for a in args], stdout=f, stderr=subprocess.STDOUT, **kwargs)
+        if proc.returncode != 0:
+            raise RuntimeError('FFmpeg ' + name + ' failed; tail of ' + str(log) + ':\n' + log.read_text()[-2000:])
+
+    print('Building FFmpeg', pin['directory'], '(first build is slow; cached afterwards)')
+    flags = [flag.format(sdk=sdk) for flag in FFMPEG_FLAGS]
+    logged([src / 'configure', '--prefix=/user/homebrew', *flags], 'configure', cwd=src, env=env)
+    logged(['make', '-j' + str(os.cpu_count() or 4)], 'build', cwd=src, env=env)
+    logged(['make', 'install', 'DESTDIR=' + str(stage)], 'install', cwd=src, env=env)
+    for lib in ('libavcodec.a', 'libavformat.a', 'libavutil.a', 'libswresample.a', 'libswscale.a'):
+        if not (stage / 'user/homebrew/lib' / lib).is_file():
+            raise RuntimeError('FFmpeg did not produce ' + lib)
+    tmp = cached.with_name(cached.name + '.staging')
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    shutil.copytree(stage / 'user/homebrew', tmp / 'homebrew')
+    (tmp / 'stamp.json').write_text(json.dumps(stamp, indent=2) + '\n')
+    if cached.exists():
+        shutil.rmtree(cached)
+    tmp.rename(cached)
+    shutil.copytree(cached / 'homebrew', sdk / 'target/user/homebrew', dirs_exist_ok=True)
+    print('FFmpeg', pin['directory'], 'built and installed over the sysroot')
+
+
+def provide_hui(evo):
+    """Install the pinned EVO UI kit where the Makefile expects its submodule.
+
+    EVO v0.12.0 records third_party/ps5-homebrew-ui as a git submodule, and a
+    pinned codeload archive contains only the empty directory. The adapter
+    unpacks the kit's own pinned archive instead (see deps.lock)."""
+    pin, archive = fetch('ps5-homebrew-ui-source')
+    dest = evo / 'third_party/ps5-homebrew-ui'
+    if dest.exists():
+        shutil.rmtree(dest)
+    with tarfile.open(archive) as t:
+        t.extractall(evo / 'third_party', filter='data')
+    (evo / 'third_party' / pin['directory']).rename(dest)
+    for rel in ('src/gfx/draw_list.cpp', 'src/gfx/font.cpp', 'src/gfx/triangulate.cpp',
+                'src/audio/cues.cpp', 'src/audio/mixer.cpp', 'src/audio/wav.cpp'):
+        if not (dest / rel).is_file():
+            raise RuntimeError('ps5-homebrew-ui is missing ' + rel + ' - layout changed')
+    for sub in ('src/ui', 'src/ui/components', 'src/core'):
+        if not any((dest / sub).glob('*.cpp')):
+            raise RuntimeError('ps5-homebrew-ui has no sources under ' + sub)
+
+
 def fix_provider_seek(demux, controller):
-    old = '(video_stream_index < 0 && audio_stream_index < 0) ||\n        !current_media_path[0]'
-    if demux.count(old) != 1:
+    # EVO v0.12.0 handles provider seeks itself: the demuxer guard does not
+    # require a local media path, and the controller resumes instead of
+    # announcing a refused seek (hardware sessions, 2026-10-01). Verify the
+    # pinned forms and leave both sources unchanged.
+    guard = '(video_stream_index < 0 && audio_stream_index < 0)\n    ) {'
+    if demux.count(guard) != 1:
         raise RuntimeError('Pinned provider seek guard changed')
-    demux = demux.replace(old, '(video_stream_index < 0 && audio_stream_index < 0)')
-    old = '    prospero_request_inplace_seek(targetSeconds, 0);\n    pp_playback_notify_seek_begin(&g_pp_pb, targetUs);'
-    if controller.count(old) != 1:
+    refused = '    if (!prospero_request_inplace_seek(targetSeconds, 0)) {'
+    handled = '        return;\n    }\n    pp_playback_notify_seek_begin(&g_pp_pb, targetUs);'
+    if controller.count(refused) != 1 or controller.count(handled) != 1:
         raise RuntimeError('Pinned provider seek controller changed')
-    controller = controller.replace(old, '    if (prospero_request_inplace_seek(targetSeconds, 0))\n        pp_playback_notify_seek_begin(&g_pp_pb, targetUs);')
     return demux, controller
 
 
@@ -400,7 +963,9 @@ def main():
     for p in (sdk/'bin').iterdir():
         if p.is_file():
             p.chmod(p.stat().st_mode | 0o111)
+    install_ffmpeg(sdk)
     evo = source('evo-player-nuvio-source')
+    provide_hui(evo)
     adapt(evo, loopback_diagnostic=loopback_diagnostic, title_ui=args.title_ui, auto_bootstrap=args.auto_bootstrap is not None)
     polish.apply(evo, nv)
     patches.write_patch(fetch('evo-player-nuvio-source')[1], evo, ROOT/'patches/evo.patch')
@@ -485,7 +1050,7 @@ def main():
                'helpers': {name: digest(WORK/name) for name in (
                    'control-1.elf', 'control-2.elf', 'control-3.elf', 'control-4.elf', 'control-5.elf',
                    'promote.elf', 'nuvio.elf', 'close.elf')},
-               'source_pins': {k: fetch(k)[0]['sha256'] for k in ('nuvio-tv-source','evo-player-nuvio-source','nuvio-pacbrew','ps5-payload-sdk-prebuilt','nuvio-official-tv-config')},
+               'source_pins': {k: fetch(k)[0]['sha256'] for k in ('nuvio-tv-source','evo-player-nuvio-source','nuvio-pacbrew','ps5-payload-sdk-prebuilt','nuvio-official-tv-config','ffmpeg-source','ps5-homebrew-ui-source')},
                'files': {str(p.relative_to(dist)): digest(p) for p in dist.rglob('*') if p.is_file()}}
     (WORK/'build.json').write_text(json.dumps(receipt, indent=2)+'\n')
     print('Native title:', dist, '\nReceipt:', WORK/'build.json')

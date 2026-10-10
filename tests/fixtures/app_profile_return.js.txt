@@ -1,4 +1,4 @@
-// GPL-3.0. Nuvio 358d08cf7496b4ba04fd62a4aaaa19cab78d7aa8 profile decision.
+// GPL-3.0. Nuvio 25b984f778e4083dc6c2e768fdb5fcf46012e8b7 profile decision.
 async function shouldShowProfileSelection() {
   const [profiles, pinStates] = await Promise.all([
     ProfileManager.getProfiles(),

@@ -155,6 +155,43 @@ class ApplyTests(unittest.TestCase):
             self.assertEqual(json.loads((root/'deps.lock').read_text())['generated'], date.today().isoformat())
             self.assertEqual(stale, ['docs/SOURCES.md'])
 
+    def test_apply_rewrites_branch_source_pin(self):
+        commit = '9'*40
+        body = b'evo head tree'
+        routes = {
+            'https://api.github.com/repos/sainsaji/EVO-PLAYER-PS5/commits/main': {'sha': commit},
+            f'https://codeload.github.com/sainsaji/EVO-PLAYER-PS5/tar.gz/{commit}': body,
+        }
+        network = FakeNetwork(routes)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root/'deps.lock').write_text(json.dumps({'manifest_version': 1, 'generated': '2026-01-01',
+                'artifacts': [{'id': 'evo-player-nuvio-source', 'commit': 'd'*40,
+                               'sha256': upstreams.digest(b'old'), 'url': 'https://example.invalid/old'}]}, indent=2)+'\n')
+            (root/'docs').mkdir()
+            (root/'docs'/'SOURCES.md').write_text('EVO ' + 'd'*40 + '\n')
+            original = upstreams.ROOT
+            original_json, original_download = upstreams.get_json, upstreams.download
+            upstreams.ROOT = root
+            upstreams.get_json = network.json
+            upstreams.download = network.body
+            argv = sys.argv
+            sys.argv = ['update_upstreams.py', '--apply']
+            try:
+                self.assertEqual(upstreams.main(), 0)
+                stale = upstreams.stale_references(['d'*40])
+            finally:
+                upstreams.ROOT = original
+                upstreams.get_json, upstreams.download = original_json, original_download
+                sys.argv = argv
+            pin = json.loads((root/'deps.lock').read_text())['artifacts'][0]
+            self.assertEqual(pin['commit'], commit)
+            self.assertNotIn('release', pin)
+            self.assertEqual(pin['sha256'], upstreams.digest(body))
+            self.assertEqual(pin['cache_file'], 'evo-player-nuvio-source-'+commit[:12]+'.tar.gz')
+            self.assertEqual(pin['directory'], 'EVO-PLAYER-PS5-'+commit)
+            self.assertEqual(stale, ['docs/SOURCES.md'])
+
 
 if __name__ == '__main__':
     unittest.main()

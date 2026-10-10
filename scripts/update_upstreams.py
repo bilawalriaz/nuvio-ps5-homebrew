@@ -176,7 +176,7 @@ def main():
         print(f'{pin["id"]}: {current[:12]} -> {newest[:12]}' if updated.get('commit')
               else f'{pin["id"]}: {current} -> {newest}')
         if args.apply:
-            previous = [pin.get('commit'), pin.get(spec['version_key'])]
+            previous = [pin.get('commit'), pin.get(spec.get('version_key'))]
             pin.update(updated)
             changed.append((pin['id'], previous))
 

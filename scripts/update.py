@@ -14,8 +14,32 @@ from build import WORK, ROOT, TITLE
 from install import helper
 
 
+def remote_dirs(path):
+    """Parent directories of an absolute remote path, outermost first."""
+    parts=path.split('/')[1:-1]
+    return ['/'+'/'.join(parts[:i+1]) for i in range(len(parts))]
+
+
+def ensure_remote_dirs(ftp, path):
+    """Create the parent directories of an absolute remote path when missing.
+
+    v0.12.0 adds files in new directories (assets/hui/sfx, assets/hui/fonts);
+    the console FTP server refuses a STOR into a directory that does not
+    exist, so each parent is created on demand."""
+    for directory in remote_dirs(path):
+        try:
+            ftp.cwd(directory)
+        except ftplib.error_perm as exc:
+            if not str(exc).startswith('550'):
+                raise
+            ftp.mkd(directory)
+
+
 def safe_param_update(before, after):
-    """Allow a title content-version bump while keeping every other field fixed."""
+    """Allow a content-version bump and EVO's flexible-memory declaration.
+
+    EVO v0.12.0 packages kernel.flexibleMemorySize (2 MiB..1 GiB) into the
+    title metadata. Every other field must stay fixed."""
     try:
         old=json.loads(before)
         new=json.loads(after)
@@ -23,12 +47,34 @@ def safe_param_update(before, after):
         new_version=new.pop('contentVersion')
         old_parts=tuple(int(part) for part in old_version.split('.'))
         new_parts=tuple(int(part) for part in new_version.split('.'))
+        old_kernel=old.pop('kernel', {})
+        new_kernel=new.pop('kernel', {})
+        old_memory=old_kernel.pop('flexibleMemorySize', None)
+        new_memory=new_kernel.pop('flexibleMemorySize', None)
+        old['kernel']=old_kernel
+        new['kernel']=new_kernel
     except (TypeError, ValueError, AttributeError, KeyError):
         return False
+    memory_ok=(old_memory is None and new_memory is None) or (
+        isinstance(new_memory, int) and not isinstance(new_memory, bool)
+        and 2097152 <= new_memory <= 1073741824 and not new_memory % 2097152
+        and (old_memory is None or old_memory == new_memory))
     return (old.get('titleId')==new.get('titleId')==TITLE and
             old.get('contentId')==new.get('contentId') and
             len(old_parts)==len(new_parts)==3 and
-            new_parts>=old_parts and old==new)
+            new_parts>=old_parts and old==new and memory_ok)
+
+
+def changes_are_reviewed(changed):
+    """Each changed title path must be a reviewed native or UI asset.
+
+    The browser UI ships inside the title folder and updates as one unit
+    (webui/). EVO v0.12.0 ships changed rml screens plus the UI kit's sound
+    and font assets, so assets/rml/ and assets/hui/ move with the title as
+    well. Everything else stays restricted to the fixed native set."""
+    allowed={'eboot.bin','sce_sys/icon0.png','sce_sys/pic0.png','sce_sys/pic1.png','sce_sys/param.json','assets/rml/nuvio.rml','assets/icons/nuvio-wordmark.png'}
+    prefixes=('webui/','assets/rml/','assets/hui/')
+    return all(name in allowed or name.startswith(prefixes) for name in changed)
 
 
 def parse_eboot_report(output):
@@ -65,10 +111,7 @@ def main():
         if rel.is_absolute() or '..' in rel.parts or not p.is_relative_to(dist.resolve()) or hashlib.sha256(p.read_bytes()).hexdigest()!=want:
             raise RuntimeError('Local receipt mismatch')
         if want!=old['files'].get(name): changed.append(name)
-    allowed={'eboot.bin','sce_sys/icon0.png','sce_sys/pic0.png','sce_sys/pic1.png','sce_sys/param.json','assets/rml/nuvio.rml','assets/icons/nuvio-wordmark.png'}
-    # The browser UI now ships inside the title folder and is served from the
-    # console by the boot payload, so a UI update replaces webui/ as one unit.
-    if any(n not in allowed and not n.startswith('webui/') for n in changed):
+    if not changes_are_reviewed(changed):
         raise RuntimeError('Changes exceed reviewed native/UI asset allowlist')
     if 'close.elf' in new.get('helpers', {}):
         import close
@@ -86,6 +129,7 @@ def main():
             # The console FTP server reports SIZE as 18446744073709551615 for
             # both existing and missing paths. Use a unique staging name and
             # verify its contents before the atomic rename.
+            ensure_remote_dirs(ftp,path)
             temp=path+'.nuvio-update-'+uuid.uuid4().hex
             ftp.storbinary('STOR '+temp,io.BytesIO(data))
             if hashlib.sha256(read(temp)).digest()!=hashlib.sha256(data).digest():raise RuntimeError('Console staging verification failed')
@@ -146,25 +190,35 @@ def main():
                 if not str(exc).startswith('550') or name in old['files']:raise
                 before=None
             if name in old['files']:
-                if before is None or hashlib.sha256(before).hexdigest()!=old['files'][name]:raise RuntimeError('Installed predecessor mismatch: '+name)
+                current=hashlib.sha256(before).hexdigest() if before is not None else None
+                if current not in (old['files'][name],new['files'][name]):
+                    raise RuntimeError('Installed predecessor mismatch: '+name)
             elif before is not None:raise RuntimeError('Unexpected pre-existing asset: '+name)
             originals[name]=before
         if 'sce_sys/param.json' in changed and not safe_param_update(
                 originals['sce_sys/param.json'], (dist/'sce_sys/param.json').read_bytes()):
             raise RuntimeError('Refusing title metadata change beyond contentVersion')
         eboot_before=None
+        eboot_replace=False
         if 'eboot.bin' in changed:
             eboot_before=parse_eboot_report(helper(5,args.host))
             expected_old=old['files'].get('eboot.bin')
-            if (eboot_before['installed'] is None or
-                    eboot_before['installed'][1]!=expected_old or
-                    eboot_before['backup'][1]!=expected_old or
-                    eboot_before['stage'] is not None):
+            expected_new=new['files'].get('eboot.bin')
+            installed=eboot_before['installed'][1] if eboot_before['installed'] else None
+            backup=eboot_before['backup'][1] if eboot_before['backup'] else None
+            if installed==expected_new and backup==expected_new and eboot_before['stage'] is None:
+                pass  # a previous run already replaced it; resume
+            elif installed==expected_old and backup==expected_old and eboot_before['stage'] is None:
+                eboot_replace=True
+            else:
                 raise RuntimeError('Console eboot or rollback backup does not match the installed receipt')
         for name in changed:
             remote='/data/homebrew/'+TITLE+'/'+name
             before=originals[name]
             if name=='eboot.bin':
+                if not eboot_replace:
+                    print('Already updated',name,'sha256',new['files'][name])
+                    continue
                 stage=remote+'.nuvio-update'
                 ftp.storbinary('STOR '+stage,io.BytesIO((dist/name).read_bytes()))
                 staged=parse_eboot_report(helper(5,args.host))
@@ -179,6 +233,9 @@ def main():
                         installed['backup']!=installed['installed'] or installed['stage'] is not None):
                     raise RuntimeError('Installed eboot hash does not match the local receipt')
                 print('Verified and replaced',name,'sha256',new['files'][name])
+                continue
+            if before is not None and hashlib.sha256(before).hexdigest()==new['files'][name]:
+                print('Already updated',name,'sha256',new['files'][name])
                 continue
             if before is not None:
                 backup='/data/homebrew/ps5-homebrew-dev/nuvio-'+hashlib.sha256(before).hexdigest()+'-'+name.replace('/','_')
